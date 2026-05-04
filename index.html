@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="description" content="French vocabulary flashcard app – Choose or Write mode, 300 words, timed sessions."/>
+<title>French Flash</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Playfair+Display:wght@500;700&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f0f1a;
+  --surface:#1a1a2e;
+  --surface2:#22223a;
+  --accent:#7c6fcd;
+  --accent2:#a78bfa;
+  --correct:#22c55e;
+  --wrong:#ef4444;
+  --text:#f1f0fb;
+  --muted:#8b8aa8;
+  --radius:16px;
+  --safe-top:env(safe-area-inset-top,0px);
+  --safe-bot:env(safe-area-inset-bottom,0px);
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;overflow:hidden}
+body{display:flex;flex-direction:column;padding-top:var(--safe-top);padding-bottom:var(--safe-bot)}
+
+/* ── SLIDER ── */
+#mode-bar{padding:14px 20px 0;flex-shrink:0}
+.slider-wrap{display:flex;background:var(--surface);border-radius:40px;padding:4px;position:relative;width:100%;max-width:320px;margin:0 auto}
+.slider-pill{position:absolute;top:4px;left:4px;width:calc(50% - 4px);height:calc(100% - 8px);background:var(--accent);border-radius:40px;transition:transform .3s ease}
+.slider-pill.right{transform:translateX(calc(100%))}
+.slider-btn{flex:1;z-index:1;background:none;border:none;color:var(--text);font-family:'Outfit',sans-serif;font-size:15px;font-weight:600;padding:10px 0;cursor:pointer;border-radius:40px;transition:color .3s}
+
+/* ── WORD ROW ── */
+#word-row{display:flex;align-items:center;justify-content:space-between;padding:18px 20px 0;flex-shrink:0}
+#english-word{font-size:26px;font-weight:700;color:var(--text);flex:1}
+#word-counter{font-size:12px;color:var(--muted);margin-top:4px}
+#shuffle-btn{min-width:48px;min-height:48px;background:var(--surface2);border:1.5px solid var(--accent);border-radius:12px;color:var(--accent2);font-family:'Outfit',sans-serif;font-size:13px;font-weight:600;padding:0 14px;cursor:pointer;white-space:nowrap;transition:background .2s}
+#shuffle-btn:active{background:var(--accent)}
+
+/* ── TIMER ── */
+#timer-row{padding:8px 20px 0;flex-shrink:0}
+#timer{font-size:18px;font-weight:600;color:var(--muted);letter-spacing:2px}
+
+/* ── INTERACTION AREA ── */
+#interaction{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:14px}
+
+/* CARDS */
+.card{background:var(--surface);border:1.5px solid var(--surface2);border-radius:var(--radius);min-height:72px;display:flex;align-items:center;padding:16px 20px;cursor:pointer;transition:transform .15s,border-color .15s;animation:slideUp .25s ease both}
+.card:active{transform:scale(.97)}
+.card-article{font-size:13px;color:var(--muted);font-family:'Outfit',sans-serif;margin-right:10px;min-width:20px}
+.card-word{font-family:'Playfair Display',serif;font-size:22px;color:var(--text)}
+.card.correct{border-color:var(--correct);background:#14532d44}
+.card.wrong{border-color:var(--wrong);background:#7f1d1d44}
+@keyframes slideUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+
+/* WRITE INPUT */
+#write-form{display:flex;gap:10px;width:100%}
+#write-input{flex:1;background:var(--surface);border:1.5px solid var(--surface2);border-radius:12px;color:var(--text);font-family:'Outfit',sans-serif;font-size:17px;padding:14px 16px;outline:none;transition:border-color .2s;-webkit-appearance:none}
+#write-input:focus{border-color:var(--accent)}
+#write-submit{min-width:48px;min-height:48px;background:var(--accent);border:none;border-radius:12px;color:#fff;font-size:20px;cursor:pointer;transition:background .2s}
+#write-submit:active{background:var(--accent2)}
+#write-feedback{font-size:15px;font-weight:600;min-height:24px;padding:4px 0}
+#write-feedback.correct{color:var(--correct)}
+#write-feedback.wrong{color:var(--wrong)}
+.write-hint{font-size:13px;color:var(--muted);padding:2px 0 8px}
+
+/* ── POPUP OVERLAY ── */
+#overlay{position:fixed;inset:0;background:#000a;display:flex;align-items:center;justify-content:center;padding:24px;z-index:100;opacity:0;pointer-events:none;transition:opacity .3s}
+#overlay.show{opacity:1;pointer-events:all}
+.popup{background:var(--surface);border-radius:20px;padding:30px 24px;width:100%;max-width:380px;text-align:center;position:relative}
+.popup h2{font-size:22px;font-weight:700;margin-bottom:20px}
+.stat{font-size:16px;margin-bottom:10px;color:var(--muted)}
+.stat span{color:var(--text);font-weight:700}
+#more-link{display:inline-block;margin-top:14px;color:var(--accent2);text-decoration:underline;font-size:15px;cursor:pointer}
+#popup-close{margin-top:20px;background:var(--surface2);border:none;border-radius:10px;color:var(--text);font-family:'Outfit',sans-serif;font-size:15px;font-weight:600;padding:12px 24px;cursor:pointer;width:100%}
+
+/* ── REVIEW SCREEN ── */
+#review{position:fixed;inset:0;background:var(--bg);z-index:200;display:flex;flex-direction:column;transform:translateY(100%);transition:transform .35s ease;padding-top:var(--safe-top);padding-bottom:var(--safe-bot)}
+#review.show{transform:translateY(0)}
+.review-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;flex-shrink:0;border-bottom:1px solid var(--surface2)}
+.review-header h3{font-size:18px;font-weight:700}
+#review-close{width:36px;height:36px;background:var(--wrong);border:none;border-radius:50%;color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+#review-list{flex:1;overflow-y:auto;padding:12px 20px}
+.review-row{display:flex;align-items:center;padding:12px 0;border-bottom:1px solid var(--surface2);gap:10px}
+.review-en{flex:1;font-size:14px;color:var(--muted)}
+.review-result{font-size:14px;font-weight:600;flex:1;text-align:center}
+.review-result.wrong-entry{color:var(--wrong)}
+.review-correct{flex:1;text-align:right;font-size:14px;color:var(--correct);font-family:'Playfair Display',serif}
+
+#start-hint{text-align:center;color:var(--muted);font-size:15px;margin-top:40px;line-height:1.7}
+</style>
+</head>
+<body>
+
+<!-- MODE SLIDER -->
+<div id="mode-bar">
+  <div class="slider-wrap" role="group" aria-label="Mode selector">
+    <div class="slider-pill" id="pill"></div>
+    <button class="slider-btn" id="btn-choose" aria-pressed="true">Choose</button>
+    <button class="slider-btn" id="btn-write" aria-pressed="false">Write</button>
+  </div>
+</div>
+
+<!-- WORD + SHUFFLE -->
+<div id="word-row">
+  <div>
+    <div id="english-word">—</div>
+    <div id="word-counter"></div>
+  </div>
+  <button id="shuffle-btn" aria-label="Shuffle and start">Shuffle</button>
+</div>
+
+<!-- TIMER -->
+<div id="timer-row"><div id="timer">00:00</div></div>
+
+<!-- INTERACTION AREA -->
+<div id="interaction">
+  <div id="start-hint">Tap <strong>Shuffle</strong> to begin a<br/>timed 300-word session.</div>
+</div>
+
+<!-- POPUP -->
+<div id="overlay" role="dialog" aria-modal="true" aria-label="Results">
+  <div class="popup">
+    <h2>Session Complete 🎉</h2>
+    <div class="stat">Time: <span id="res-time">—</span></div>
+    <div class="stat">Correct: <span id="res-correct">—</span></div>
+    <div class="stat">Incorrect: <span id="res-wrong">—</span></div>
+    <div><a id="more-link" role="button" tabindex="0">more</a></div>
+    <button id="popup-close" aria-label="Close results">Close</button>
+  </div>
+</div>
+
+<!-- REVIEW SCREEN -->
+<div id="review" role="dialog" aria-modal="true" aria-label="Review">
+  <div class="review-header">
+    <h3>Review</h3>
+    <button id="review-close" aria-label="Close review">✕</button>
+  </div>
+  <div id="review-list"></div>
+</div>
+
+<script>
+const VOCAB=[
+{en:"boat",fr:"bateau",article:"le",gender:"m"},
+{en:"truck",fr:"camion",article:"le",gender:"m"},
+{en:"fire",fr:"feu",article:"le",gender:"m"},
+{en:"time / weather",fr:"temps",article:"le",gender:"m"},
+{en:"day",fr:"jour",article:"le",gender:"m"},
+{en:"month",fr:"mois",article:"le",gender:"m"},
+{en:"morning",fr:"matin",article:"le",gender:"m"},
+{en:"evening",fr:"soir",article:"le",gender:"m"},
+{en:"lunch",fr:"déjeuner",article:"le",gender:"m"},
+{en:"dinner",fr:"dîner",article:"le",gender:"m"},
+{en:"cheese",fr:"fromage",article:"le",gender:"m"},
+{en:"bread",fr:"pain",article:"le",gender:"m"},
+{en:"butter",fr:"beurre",article:"le",gender:"m"},
+{en:"rice",fr:"riz",article:"le",gender:"m"},
+{en:"chicken",fr:"poulet",article:"le",gender:"m"},
+{en:"fish",fr:"poisson",article:"le",gender:"m"},
+{en:"fruit",fr:"fruit",article:"le",gender:"m"},
+{en:"vegetable",fr:"légume",article:"le",gender:"m"},
+{en:"salt",fr:"sel",article:"le",gender:"m"},
+{en:"pepper",fr:"poivre",article:"le",gender:"m"},
+{en:"sugar",fr:"sucre",article:"le",gender:"m"},
+{en:"cake",fr:"gâteau",article:"le",gender:"m"},
+{en:"dessert",fr:"dessert",article:"le",gender:"m"},
+{en:"chocolate",fr:"chocolat",article:"le",gender:"m"},
+{en:"candy",fr:"bonbon",article:"le",gender:"m"},
+{en:"juice",fr:"jus",article:"le",gender:"m"},
+{en:"coffee",fr:"café",article:"le",gender:"m"},
+{en:"tea",fr:"thé",article:"le",gender:"m"},
+{en:"milk",fr:"lait",article:"le",gender:"m"},
+{en:"glass",fr:"verre",article:"le",gender:"m"},
+{en:"knife",fr:"couteau",article:"le",gender:"m"},
+{en:"oven",fr:"four",article:"le",gender:"m"},
+{en:"fridge",fr:"frigo",article:"le",gender:"m"},
+{en:"sink",fr:"lavabo",article:"le",gender:"m"},
+{en:"faucet",fr:"robinet",article:"le",gender:"m"},
+{en:"mirror",fr:"miroir",article:"le",gender:"m"},
+{en:"couch",fr:"canapé",article:"le",gender:"m"},
+{en:"armchair",fr:"fauteuil",article:"le",gender:"m"},
+{en:"carpet",fr:"tapis",article:"le",gender:"m"},
+{en:"floor",fr:"sol",article:"le",gender:"m"},
+{en:"ceiling",fr:"plafond",article:"le",gender:"m"},
+{en:"desk",fr:"bureau",article:"le",gender:"m"},
+{en:"pencil",fr:"crayon",article:"le",gender:"m"},
+{en:"pencil sharpener",fr:"taille-crayon",article:"le",gender:"m"},
+{en:"board",fr:"tableau",article:"le",gender:"m"},
+{en:"school bag",fr:"cartable",article:"le",gender:"m"},
+{en:"binder",fr:"classeur",article:"le",gender:"m"},
+{en:"homework",fr:"devoir",article:"le",gender:"m"},
+{en:"word",fr:"mot",article:"le",gender:"m"},
+{en:"first name",fr:"prénom",article:"le",gender:"m"},
+{en:"last name",fr:"nom",article:"le",gender:"m"},
+{en:"brother",fr:"frère",article:"le",gender:"m"},
+{en:"father",fr:"père",article:"le",gender:"m"},
+{en:"husband",fr:"mari",article:"le",gender:"m"},
+{en:"grandfather",fr:"grand-père",article:"le",gender:"m"},
+{en:"son",fr:"fils",article:"le",gender:"m"},
+{en:"baby",fr:"bébé",article:"le",gender:"m"},
+{en:"boy",fr:"garçon",article:"le",gender:"m"},
+{en:"mister",fr:"monsieur",article:"le",gender:"m"},
+{en:"king",fr:"roi",article:"le",gender:"m"},
+{en:"customer",fr:"client",article:"le",gender:"m"},
+{en:"neighbor",fr:"voisin",article:"le",gender:"m"},
+{en:"colleague",fr:"collègue",article:"le",gender:"m"},
+{en:"boss",fr:"patron",article:"le",gender:"m"},
+{en:"doctor",fr:"docteur",article:"le",gender:"m"},
+{en:"physician",fr:"médecin",article:"le",gender:"m"},
+{en:"teacher",fr:"professeur",article:"le",gender:"m"},
+{en:"policeman",fr:"policier",article:"le",gender:"m"},
+{en:"fireman",fr:"pompier",article:"le",gender:"m"},
+{en:"waiter",fr:"serveur",article:"le",gender:"m"},
+{en:"salesman",fr:"vendeur",article:"le",gender:"m"},
+{en:"mailman",fr:"facteur",article:"le",gender:"m"},
+{en:"gardener",fr:"jardinier",article:"le",gender:"m"},
+{en:"mechanic",fr:"mécanicien",article:"le",gender:"m"},
+{en:"plumber",fr:"plombier",article:"le",gender:"m"},
+{en:"cook",fr:"cuisinier",article:"le",gender:"m"},
+{en:"baker",fr:"boulanger",article:"le",gender:"m"},
+{en:"butcher",fr:"boucher",article:"le",gender:"m"},
+{en:"painter",fr:"peintre",article:"le",gender:"m"},
+{en:"singer",fr:"chanteur",article:"le",gender:"m"},
+{en:"dancer",fr:"danseur",article:"le",gender:"m"},
+{en:"player",fr:"joueur",article:"le",gender:"m"},
+{en:"athlete",fr:"sportif",article:"le",gender:"m"},
+{en:"movie",fr:"film",article:"le",gender:"m"},
+{en:"cinema",fr:"cinéma",article:"le",gender:"m"},
+{en:"theatre",fr:"théâtre",article:"le",gender:"m"},
+{en:"concert",fr:"concert",article:"le",gender:"m"},
+{en:"game",fr:"jeu",article:"le",gender:"m"},
+{en:"match",fr:"match",article:"le",gender:"m"},
+{en:"ball",fr:"ballon",article:"le",gender:"m"},
+{en:"sport",fr:"sport",article:"le",gender:"m"},
+{en:"skiing",fr:"ski",article:"le",gender:"m"},
+{en:"soccer",fr:"football",article:"le",gender:"m"},
+{en:"tennis",fr:"tennis",article:"le",gender:"m"},
+{en:"basketball",fr:"basket",article:"le",gender:"m"},
+{en:"delivery man",fr:"livreur",article:"le",gender:"m"},
+{en:"garage",fr:"garage",article:"le",gender:"m"},
+{en:"parking lot",fr:"parking",article:"le",gender:"m"},
+{en:"park",fr:"parc",article:"le",gender:"m"},
+{en:"garden",fr:"jardin",article:"le",gender:"m"},
+{en:"field",fr:"champ",article:"le",gender:"m"},
+{en:"wood",fr:"bois",article:"le",gender:"m"},
+{en:"lake",fr:"lac",article:"le",gender:"m"},
+{en:"river",fr:"fleuve",article:"le",gender:"m"},
+{en:"desert",fr:"désert",article:"le",gender:"m"},
+{en:"volcano",fr:"volcan",article:"le",gender:"m"},
+{en:"cloud",fr:"nuage",article:"le",gender:"m"},
+{en:"thunder",fr:"tonnerre",article:"le",gender:"m"},
+{en:"earthquake",fr:"tremblement",article:"le",gender:"m"},
+{en:"mobile phone",fr:"téléphone portable",article:"le",gender:"m"},
+{en:"message",fr:"message",article:"le",gender:"m"},
+{en:"email",fr:"mail",article:"le",gender:"m"},
+{en:"website",fr:"site",article:"le",gender:"m"},
+{en:"network",fr:"réseau",article:"le",gender:"m"},
+{en:"code",fr:"code",article:"le",gender:"m"},
+{en:"button",fr:"bouton",article:"le",gender:"m"},
+{en:"keyboard",fr:"clavier",article:"le",gender:"m"},
+{en:"charger",fr:"chargeur",article:"le",gender:"m"},
+{en:"cable",fr:"câble",article:"le",gender:"m"},
+{en:"folder",fr:"dossier",article:"le",gender:"m"},
+{en:"file",fr:"fichier",article:"le",gender:"m"},
+{en:"password",fr:"mot de passe",article:"le",gender:"m"},
+{en:"signal",fr:"signal",article:"le",gender:"m"},
+{en:"virus",fr:"virus",article:"le",gender:"m"},
+{en:"robot",fr:"robot",article:"le",gender:"m"},
+{en:"system",fr:"système",article:"le",gender:"m"},
+{en:"program",fr:"programme",article:"le",gender:"m"},
+{en:"project",fr:"projet",article:"le",gender:"m"},
+{en:"car",fr:"voiture",article:"la",gender:"f"},
+{en:"house",fr:"maison",article:"la",gender:"f"},
+{en:"window",fr:"fenêtre",article:"la",gender:"f"},
+{en:"door",fr:"porte",article:"la",gender:"f"},
+{en:"chair",fr:"chaise",article:"la",gender:"f"},
+{en:"table",fr:"table",article:"la",gender:"f"},
+{en:"lamp",fr:"lampe",article:"la",gender:"f"},
+{en:"street",fr:"rue",article:"la",gender:"f"},
+{en:"road",fr:"route",article:"la",gender:"f"},
+{en:"kitchen",fr:"cuisine",article:"la",gender:"f"},
+{en:"bedroom",fr:"chambre",article:"la",gender:"f"},
+{en:"room",fr:"salle",article:"la",gender:"f"},
+{en:"shower",fr:"douche",article:"la",gender:"f"},
+{en:"bathtub",fr:"baignoire",article:"la",gender:"f"},
+{en:"towel",fr:"serviette",article:"la",gender:"f"},
+{en:"brush",fr:"brosse",article:"la",gender:"f"},
+{en:"TV",fr:"télé",article:"la",gender:"f"},
+{en:"radio",fr:"radio",article:"la",gender:"f"},
+{en:"music",fr:"musique",article:"la",gender:"f"},
+{en:"song",fr:"chanson",article:"la",gender:"f"},
+{en:"voice",fr:"voix",article:"la",gender:"f"},
+{en:"photo",fr:"photo",article:"la",gender:"f"},
+{en:"camera",fr:"caméra",article:"la",gender:"f"},
+{en:"battery",fr:"pile",article:"la",gender:"f"},
+{en:"plug",fr:"prise",article:"la",gender:"f"},
+{en:"machine",fr:"machine",article:"la",gender:"f"},
+{en:"watch",fr:"montre",article:"la",gender:"f"},
+{en:"map / card",fr:"carte",article:"la",gender:"f"},
+{en:"key",fr:"clé",article:"la",gender:"f"},
+{en:"box",fr:"boîte",article:"la",gender:"f"},
+{en:"trash can",fr:"poubelle",article:"la",gender:"f"},
+{en:"cup",fr:"tasse",article:"la",gender:"f"},
+{en:"fork",fr:"fourchette",article:"la",gender:"f"},
+{en:"spoon",fr:"cuillère",article:"la",gender:"f"},
+{en:"bottle",fr:"bouteille",article:"la",gender:"f"},
+{en:"soup",fr:"soupe",article:"la",gender:"f"},
+{en:"meat",fr:"viande",article:"la",gender:"f"},
+{en:"salad",fr:"salade",article:"la",gender:"f"},
+{en:"apple",fr:"pomme",article:"la",gender:"f"},
+{en:"banana",fr:"banane",article:"la",gender:"f"},
+{en:"strawberry",fr:"fraise",article:"la",gender:"f"},
+{en:"cherry",fr:"cerise",article:"la",gender:"f"},
+{en:"tomato",fr:"tomate",article:"la",gender:"f"},
+{en:"carrot",fr:"carotte",article:"la",gender:"f"},
+{en:"potato",fr:"patate",article:"la",gender:"f"},
+{en:"zucchini",fr:"courgette",article:"la",gender:"f"},
+{en:"ice cream",fr:"glace",article:"la",gender:"f"},
+{en:"jam",fr:"confiture",article:"la",gender:"f"},
+{en:"cream",fr:"crème",article:"la",gender:"f"},
+{en:"flour",fr:"farine",article:"la",gender:"f"},
+{en:"yeast",fr:"levure",article:"la",gender:"f"},
+{en:"recipe",fr:"recette",article:"la",gender:"f"},
+{en:"cooking",fr:"cuisine",article:"la",gender:"f"},
+{en:"hunger",fr:"faim",article:"la",gender:"f"},
+{en:"thirst",fr:"soif",article:"la",gender:"f"},
+{en:"health",fr:"santé",article:"la",gender:"f"},
+{en:"illness",fr:"maladie",article:"la",gender:"f"},
+{en:"fever",fr:"fièvre",article:"la",gender:"f"},
+{en:"pain",fr:"douleur",article:"la",gender:"f"},
+{en:"injury",fr:"blessure",article:"la",gender:"f"},
+{en:"flu",fr:"grippe",article:"la",gender:"f"},
+{en:"cough",fr:"toux",article:"la",gender:"f"},
+{en:"throat",fr:"gorge",article:"la",gender:"f"},
+{en:"head",fr:"tête",article:"la",gender:"f"},
+{en:"hand",fr:"main",article:"la",gender:"f"},
+{en:"leg",fr:"jambe",article:"la",gender:"f"},
+{en:"mouth",fr:"bouche",article:"la",gender:"f"},
+{en:"tooth",fr:"dent",article:"la",gender:"f"},
+{en:"skin",fr:"peau",article:"la",gender:"f"},
+{en:"tongue",fr:"langue",article:"la",gender:"f"},
+{en:"thought",fr:"pensée",article:"la",gender:"f"},
+{en:"memory",fr:"mémoire",article:"la",gender:"f"},
+{en:"question",fr:"question",article:"la",gender:"f"},
+{en:"answer",fr:"réponse",article:"la",gender:"f"},
+{en:"sentence",fr:"phrase",article:"la",gender:"f"},
+{en:"letter",fr:"lettre",article:"la",gender:"f"},
+{en:"reading",fr:"lecture",article:"la",gender:"f"},
+{en:"culture",fr:"culture",article:"la",gender:"f"},
+{en:"language",fr:"langue",article:"la",gender:"f"},
+{en:"nation",fr:"nation",article:"la",gender:"f"},
+{en:"city",fr:"ville",article:"la",gender:"f"},
+{en:"countryside",fr:"campagne",article:"la",gender:"f"},
+{en:"sea",fr:"mer",article:"la",gender:"f"},
+{en:"mountain",fr:"montagne",article:"la",gender:"f"},
+{en:"valley",fr:"vallée",article:"la",gender:"f"},
+{en:"forest",fr:"forêt",article:"la",gender:"f"},
+{en:"beach",fr:"plage",article:"la",gender:"f"},
+{en:"planet",fr:"planète",article:"la",gender:"f"},
+{en:"earth",fr:"terre",article:"la",gender:"f"},
+{en:"moon",fr:"lune",article:"la",gender:"f"},
+{en:"weather forecast",fr:"météo",article:"la",gender:"f"},
+{en:"heat",fr:"chaleur",article:"la",gender:"f"},
+{en:"light",fr:"lumière",article:"la",gender:"f"},
+{en:"color",fr:"couleur",article:"la",gender:"f"},
+{en:"shape",fr:"forme",article:"la",gender:"f"},
+{en:"size",fr:"taille",article:"la",gender:"f"},
+{en:"speed",fr:"vitesse",article:"la",gender:"f"},
+{en:"strength",fr:"force",article:"la",gender:"f"},
+{en:"beauty",fr:"beauté",article:"la",gender:"f"},
+{en:"joy",fr:"joie",article:"la",gender:"f"},
+{en:"sadness",fr:"tristesse",article:"la",gender:"f"},
+{en:"fear",fr:"peur",article:"la",gender:"f"},
+{en:"anger",fr:"colère",article:"la",gender:"f"},
+{en:"surprise",fr:"surprise",article:"la",gender:"f"},
+{en:"shame",fr:"honte",article:"la",gender:"f"},
+{en:"luck",fr:"chance",article:"la",gender:"f"},
+{en:"peace",fr:"paix",article:"la",gender:"f"},
+{en:"war",fr:"guerre",article:"la",gender:"f"},
+{en:"victory",fr:"victoire",article:"la",gender:"f"},
+{en:"defeat",fr:"défaite",article:"la",gender:"f"},
+{en:"party",fr:"fête",article:"la",gender:"f"},
+{en:"dance",fr:"danse",article:"la",gender:"f"},
+{en:"painting",fr:"peinture",article:"la",gender:"f"},
+{en:"sculpture",fr:"sculpture",article:"la",gender:"f"},
+{en:"photography",fr:"photographie",article:"la",gender:"f"},
+{en:"fashion",fr:"mode",article:"la",gender:"f"},
+{en:"dress",fr:"robe",article:"la",gender:"f"},
+{en:"skirt",fr:"jupe",article:"la",gender:"f"},
+{en:"shirt",fr:"chemise",article:"la",gender:"f"},
+{en:"shoe",fr:"chaussure",article:"la",gender:"f"},
+{en:"boot",fr:"botte",article:"la",gender:"f"},
+{en:"sock",fr:"chaussette",article:"la",gender:"f"},
+{en:"belt",fr:"ceinture",article:"la",gender:"f"},
+{en:"wristwatch",fr:"montre",article:"la",gender:"f"},
+{en:"ring",fr:"bague",article:"la",gender:"f"},
+{en:"buckle",fr:"boucle",article:"la",gender:"f"},
+{en:"suitcase",fr:"valise",article:"la",gender:"f"},
+{en:"bill",fr:"facture",article:"la",gender:"f"},
+{en:"order",fr:"commande",article:"la",gender:"f"},
+{en:"delivery",fr:"livraison",article:"la",gender:"f"},
+{en:"meeting",fr:"réunion",article:"la",gender:"f"},
+{en:"request",fr:"demande",article:"la",gender:"f"},
+{en:"date",fr:"date",article:"la",gender:"f"},
+{en:"minute",fr:"minute",article:"la",gender:"f"},
+{en:"second",fr:"seconde",article:"la",gender:"f"},
+{en:"week",fr:"semaine",article:"la",gender:"f"},
+{en:"hour",fr:"heure",article:"l'",gender:"f"},
+{en:"year",fr:"année",article:"l'",gender:"f"},
+{en:"season",fr:"saison",article:"la",gender:"f"},
+{en:"end",fr:"fin",article:"la",gender:"f"},
+{en:"solution",fr:"solution",article:"la",gender:"f"},
+{en:"method",fr:"méthode",article:"la",gender:"f"},
+{en:"page",fr:"page",article:"la",gender:"f"},
+{en:"line",fr:"ligne",article:"la",gender:"f"},
+{en:"list",fr:"liste",article:"la",gender:"f"},
+{en:"note",fr:"note",article:"la",gender:"f"},
+{en:"thing",fr:"chose",article:"la",gender:"f"},
+{en:"way",fr:"manière",article:"la",gender:"f"},
+{en:"reason",fr:"raison",article:"la",gender:"f"},
+{en:"truth",fr:"vérité",article:"la",gender:"f"}
+];
+</script>
+<script>
+// ── STATE ──
+let mode = 'choose';   // 'choose' | 'write'
+let queue = [];        // shuffled VOCAB indices
+let qIdx = 0;          // current position in queue
+let score = [];        // {word, correct, chosen}
+let timerSec = 0;
+let timerHandle = null;
+let started = false;
+let finished = false;
+let finalTime = '';
+
+// ── HELPERS ──
+function shuffle(arr){
+  const a=[...arr];
+  for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}
+  return a;
+}
+function fmtTime(s){
+  const m=Math.floor(s/60).toString().padStart(2,'0');
+  const sc=(s%60).toString().padStart(2,'0');
+  return `${m}:${sc}`;
+}
+function stopTimer(){
+  clearInterval(timerHandle);
+  timerHandle=null;
+}
+function startTimer(){
+  stopTimer();
+  timerSec=0;
+  document.getElementById('timer').textContent='00:00';
+  timerHandle=setInterval(()=>{
+    timerSec++;
+    document.getElementById('timer').textContent=fmtTime(timerSec);
+  },1000);
+}
+
+// ── DISTRACTOR SELECTION ──
+function getDistractors(current){
+  const pool=VOCAB.filter((_,i)=>i!==queue[qIdx]&&VOCAB[i].gender===current.gender);
+  const picks=shuffle(pool).slice(0,2);
+  return picks;
+}
+
+// ── RENDER ──
+function renderWord(){
+  const w=VOCAB[queue[qIdx]];
+  document.getElementById('english-word').textContent=w.en;
+  document.getElementById('word-counter').textContent=`${qIdx+1} / ${VOCAB.length}`;
+}
+
+function renderChoose(){
+  const current=VOCAB[queue[qIdx]];
+  const distractors=getDistractors(current);
+  const options=shuffle([current,...distractors]);
+  const area=document.getElementById('interaction');
+  area.innerHTML='';
+  options.forEach((opt,i)=>{
+    const card=document.createElement('div');
+    card.className='card';
+    card.style.animationDelay=`${i*60}ms`;
+    card.setAttribute('role','button');
+    card.setAttribute('tabindex','0');
+    card.setAttribute('aria-label',`${opt.article} ${opt.fr}`);
+
+    const art=document.createElement('span');
+    art.className='card-article';
+    art.textContent=opt.article;
+
+    const wrd=document.createElement('span');
+    wrd.className='card-word';
+    wrd.textContent=opt.fr;
+
+    card.appendChild(art);
+    card.appendChild(wrd);
+
+    const isCorrect=(opt.fr===current.fr);
+    const handler=()=>handleChoose(card,isCorrect,current,opt.fr,options,handler);
+    card.addEventListener('click',handler);
+    card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' ')handler();});
+    area.appendChild(card);
+  });
+}
+
+function handleChoose(card,isCorrect,word,chosen,allOptions,handler){
+  // disable all cards
+  document.querySelectorAll('.card').forEach(c=>{
+    c.style.pointerEvents='none';
+    c.removeEventListener('click',handler);
+  });
+  card.classList.add(isCorrect?'correct':'wrong');
+  if(!isCorrect){
+    // highlight correct
+    document.querySelectorAll('.card').forEach(c=>{
+      if(c.querySelector('.card-word').textContent===word.fr) c.classList.add('correct');
+    });
+  }
+  score.push({word,correct:isCorrect,chosen});
+  setTimeout(()=>advance(),700);
+}
+
+function renderWrite(){
+  const area=document.getElementById('interaction');
+  area.innerHTML='';
+
+  const hint=document.createElement('div');
+  hint.className='write-hint';
+  hint.textContent='Include the article: le / la / l\'';
+  area.appendChild(hint);
+
+  const form=document.createElement('form');
+  form.id='write-form';
+  form.noValidate=true;
+
+  const inp=document.createElement('input');
+  inp.type='text';
+  inp.id='write-input';
+  inp.autocomplete='off';
+  inp.autocorrect='off';
+  inp.autocapitalize='none';
+  inp.spellcheck=false;
+  inp.placeholder='e.g. la voiture, le bateau, l\'heure';
+  inp.setAttribute('aria-label','French answer');
+
+  const btn=document.createElement('button');
+  btn.type='submit';
+  btn.id='write-submit';
+  btn.innerHTML='✓';
+  btn.setAttribute('aria-label','Submit answer');
+
+  const fb=document.createElement('div');
+  fb.id='write-feedback';
+
+  form.appendChild(inp);
+  form.appendChild(btn);
+  area.appendChild(form);
+  area.appendChild(fb);
+
+  form.addEventListener('submit',e=>{
+    e.preventDefault();
+    if(!inp.value.trim()) return;
+    handleWrite(inp,fb);
+  });
+
+  // auto-focus after a tick so iOS shows keyboard
+  setTimeout(()=>inp.focus(),100);
+}
+
+function handleWrite(inp,fb){
+  const current=VOCAB[queue[qIdx]];
+  const answer=inp.value.trim().toLowerCase();
+  // Full correct answer = article + space + word (e.g. "la voiture", "l'heure")
+  const correct=(current.article+' '+current.fr).toLowerCase();
+  const isCorrect=(answer===correct);
+  fb.className='';
+  fb.classList.add(isCorrect?'correct':'wrong');
+  fb.textContent=isCorrect?'✓ Correct!':`✗  ${current.article} ${current.fr}`;
+  inp.disabled=true;
+  document.getElementById('write-submit').disabled=true;
+  score.push({word:current,correct:isCorrect,chosen:inp.value.trim()});
+  setTimeout(()=>advance(),900);
+}
+
+function advance(){
+  qIdx++;
+  if(qIdx>=VOCAB.length){
+    endSession();
+    return;
+  }
+  renderWord();
+  if(mode==='choose') renderChoose();
+  else renderWrite();
+}
+
+// ── SESSION CONTROL ──
+function beginSession(){
+  if(started&&!finished){
+    const done=score.length;
+    if(done>0&&!confirm(`Reset? You've answered ${done} word${done===1?'':'s'}.`)) return;
+  }
+  queue=shuffle(VOCAB.map((_,i)=>i));
+  qIdx=0;
+  score=[];
+  finished=false;
+  started=true;
+  renderWord();
+  if(mode==='choose') renderChoose(); else renderWrite();
+  startTimer();
+}
+
+function endSession(){
+  stopTimer();
+  finished=true;
+  finalTime=fmtTime(timerSec);
+  const correct=score.filter(s=>s.correct).length;
+  const wrong=score.length-correct;
+  document.getElementById('res-time').textContent=finalTime;
+  document.getElementById('res-correct').textContent=correct;
+  document.getElementById('res-wrong').textContent=wrong;
+  document.getElementById('overlay').classList.add('show');
+  // keep last word visible behind overlay
+}
+
+// ── REVIEW SCREEN ──
+function buildReview(){
+  const list=document.getElementById('review-list');
+  list.innerHTML='';
+  score.forEach(s=>{
+    const row=document.createElement('div');
+    row.className='review-row';
+
+    const en=document.createElement('div');
+    en.className='review-en';
+    en.textContent=s.word.en;
+
+    const res=document.createElement('div');
+    res.className='review-result '+(s.correct?'':'wrong-entry');
+    if(s.correct){
+      res.textContent='✓';
+      res.style.color='var(--correct)';
+    } else {
+      res.textContent=`✗ ${s.chosen}`;
+    }
+
+    const cor=document.createElement('div');
+    cor.className='review-correct';
+    cor.textContent=`${s.word.article} ${s.word.fr}`;
+
+    row.appendChild(en);
+    row.appendChild(res);
+    row.appendChild(cor);
+    list.appendChild(row);
+  });
+}
+
+// ── EVENT WIRING ──
+document.getElementById('shuffle-btn').addEventListener('click',()=>beginSession());
+
+// mode slider
+function setMode(m){
+  if(mode===m) return;
+  mode=m;
+  const pill=document.getElementById('pill');
+  pill.classList.toggle('right',m==='write');
+  document.getElementById('btn-choose').setAttribute('aria-pressed', m==='choose');
+  document.getElementById('btn-write').setAttribute('aria-pressed', m==='write');
+  if(started&&!finished) beginSession();
+}
+document.getElementById('btn-choose').addEventListener('click',()=>setMode('choose'));
+document.getElementById('btn-write').addEventListener('click',()=>setMode('write'));
+
+// popup close
+document.getElementById('popup-close').addEventListener('click',()=>{
+  document.getElementById('overlay').classList.remove('show');
+  // show last word + stopped timer (already in DOM)
+});
+
+// more link
+document.getElementById('more-link').addEventListener('click',()=>{
+  buildReview();
+  document.getElementById('review').classList.add('show');
+});
+document.getElementById('more-link').addEventListener('keydown',e=>{
+  if(e.key==='Enter') document.getElementById('more-link').click();
+});
+
+// review close
+document.getElementById('review-close').addEventListener('click',()=>{
+  document.getElementById('review').classList.remove('show');
+});
+</script>
+</body>
+</html>
