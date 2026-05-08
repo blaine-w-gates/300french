@@ -79,6 +79,8 @@ body{display:flex;flex-direction:column;padding-top:var(--safe-top);padding-bott
 #popup-close{margin-top:12px;background:var(--surface2);border:none;border-radius:10px;color:var(--text);font-family:'Outfit',sans-serif;font-size:15px;font-weight:600;padding:12px 24px;cursor:pointer;width:100%}
 #wrong-only-btn{margin-top:12px;background:var(--accent);border:none;border-radius:10px;color:#fff;font-family:'Outfit',sans-serif;font-size:15px;font-weight:600;padding:12px 24px;cursor:pointer;width:100%;display:none}
 #wrong-only-btn.show{display:block}
+#next-batch-btn{margin-top:12px;background:var(--correct);border:none;border-radius:10px;color:#fff;font-family:'Outfit',sans-serif;font-size:15px;font-weight:600;padding:12px 24px;cursor:pointer;width:100%;display:none}
+#next-batch-btn.show{display:block}
 
 /* ── REVIEW SCREEN ── */
 #review{position:fixed;inset:0;background:var(--bg);z-index:200;display:flex;flex-direction:column;transform:translateY(100%);transition:transform .35s ease;padding-top:var(--safe-top);padding-bottom:var(--safe-bot)}
@@ -94,6 +96,12 @@ body{display:flex;flex-direction:column;padding-top:var(--safe-top);padding-bott
 .review-correct{flex:1;text-align:right;font-size:14px;color:var(--correct);font-family:'Playfair Display',serif}
 
 #start-hint{text-align:center;color:var(--muted);font-size:15px;margin-top:40px;line-height:1.7}
+
+/* ── BATCH SELECTOR ── */
+#batch-bar{padding:10px 20px 0;display:flex;align-items:center;gap:12px;flex-shrink:0}
+#batch-select{flex:1;background:var(--surface);border:1.5px solid var(--surface2);border-radius:10px;color:var(--text);font-family:'Outfit',sans-serif;font-size:14px;padding:10px 14px;cursor:pointer;outline:none}
+#batch-select:focus{border-color:var(--accent)}
+#batch-indicator{font-size:12px;color:var(--accent2);font-weight:600;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -105,6 +113,20 @@ body{display:flex;flex-direction:column;padding-top:var(--safe-top);padding-bott
     <button class="slider-btn" id="btn-choose" aria-pressed="true">Choose</button>
     <button class="slider-btn" id="btn-write" aria-pressed="false">Write</button>
   </div>
+</div>
+
+<!-- BATCH SELECTOR -->
+<div id="batch-bar">
+  <select id="batch-select" aria-label="Select batch">
+    <option value="">Full Set (300 words)</option>
+    <option value="0">Batch 1 (~50 words)</option>
+    <option value="1">Batch 2 (~50 words)</option>
+    <option value="2">Batch 3 (~50 words)</option>
+    <option value="3">Batch 4 (~50 words)</option>
+    <option value="4">Batch 5 (~50 words)</option>
+    <option value="5">Batch 6 (~50 words)</option>
+  </select>
+  <div id="batch-indicator"></div>
 </div>
 
 <!-- WORD + SHUFFLE -->
@@ -133,6 +155,7 @@ body{display:flex;flex-direction:column;padding-top:var(--safe-top);padding-bott
     <div class="stat">Incorrect: <span id="res-wrong">—</span></div>
     <div><a id="more-link" role="button" tabindex="0">more</a></div>
     <button id="wrong-only-btn" aria-label="Practice wrong words">Only Wrong</button>
+    <button id="next-batch-btn" aria-label="Go to next batch">Next Batch →</button>
     <button id="popup-close" aria-label="Close results">Close</button>
   </div>
 </div>
@@ -441,6 +464,12 @@ let finished = false;
 let finalTime = '';
 let activeVocab = VOCAB;
 
+// ── BATCH STATE ──
+let batches = [];           // 6 arrays of ~50 words each
+let currentBatch = null;    // 0-5 for batch mode, null for full set
+let wrongSourceBatch = null;// Track which batch wrong words came from
+let completedBatches = [];  // Boolean array [false, false, ...]
+
 // ── HELPERS ──
 function shuffle(arr){
   const a=[...arr];
@@ -464,6 +493,24 @@ function startTimer(){
     timerSec++;
     document.getElementById('timer').textContent=fmtTime(timerSec);
   },1000);
+}
+
+// ── BATCH CREATION ──
+function createBatches(){
+  const shuffled = shuffle([...VOCAB]);
+  const batchSize = Math.floor(shuffled.length / 6);
+  const remainder = shuffled.length % 6;
+  batches = [];
+  let idx = 0;
+  for(let i=0;i<6;i++){
+    const size = batchSize + (i < remainder ? 1 : 0);
+    batches.push(shuffled.slice(idx, idx + size));
+    idx += size;
+  }
+  currentBatch = null;
+  wrongSourceBatch = null;
+  completedBatches = [false, false, false, false, false, false];
+  updateBatchIndicator();
 }
 
 // ── DISTRACTOR SELECTION ──
@@ -609,15 +656,58 @@ function beginSession(resetToFullList=false){
     const done=score.length;
     if(done>0&&!confirm(`Reset? You've answered ${done} word${done===1?'':'s'}.`)) return;
   }
-  if(resetToFullList) activeVocab=VOCAB;
+  if(resetToFullList){
+    activeVocab=VOCAB;
+    currentBatch=null;
+    wrongSourceBatch=null;
+  }
   queue=shuffle(activeVocab.map((_,i)=>i));
   qIdx=0;
   score=[];
   finished=false;
   started=true;
   renderWord();
+  updateBatchIndicator();
   if(mode==='choose') renderChoose(); else renderWrite();
   startTimer();
+}
+
+function selectBatch(batchNum){
+  if(batchNum===null||batchNum===undefined||batchNum===''){
+    currentBatch=null;
+    activeVocab=VOCAB;
+  }else{
+    const n=parseInt(batchNum,10);
+    if(batches.length===0) createBatches();
+    if(n>=0&&n<6&&batches[n]){
+      currentBatch=n;
+      activeVocab=batches[n];
+    }
+  }
+  wrongSourceBatch=null;
+  updateBatchIndicator();
+  if(started&&!finished){
+    beginSession();
+  }else if(!started){
+    document.getElementById('english-word').textContent='—';
+    document.getElementById('word-counter').textContent='';
+  }
+}
+
+function updateBatchIndicator(){
+  const ind=document.getElementById('batch-indicator');
+  const sel=document.getElementById('batch-select');
+  if(sel) sel.value=currentBatch!==null?currentBatch:'';
+  if(!ind) return;
+  if(currentBatch!==null){
+    const batchSize=activeVocab.length;
+    const status=completedBatches[currentBatch]?'✓':'•';
+    ind.textContent=`${status} Batch ${currentBatch+1} (${batchSize} words)`;
+  }else if(wrongSourceBatch!==null){
+    ind.textContent=`Reviewing wrong from Batch ${wrongSourceBatch+1}`;
+  }else{
+    ind.textContent='Full Set (300 words)';
+  }
 }
 
 function endSession(){
@@ -631,12 +721,33 @@ function endSession(){
   document.getElementById('res-wrong').textContent=wrong;
   const wrongBtn=document.getElementById('wrong-only-btn');
   wrongBtn.classList.toggle('show',wrong>0);
+  const nextBatchBtn=document.getElementById('next-batch-btn');
+  if(nextBatchBtn){
+    const hasNextBatch=currentBatch!==null&&currentBatch<5&&!completedBatches[currentBatch+1];
+    const allCorrect=wrong===0;
+    nextBatchBtn.classList.toggle('show',hasNextBatch&&allCorrect);
+  }
+  if(currentBatch!==null&&wrong===0){
+    completedBatches[currentBatch]=true;
+    updateBatchIndicator();
+  }
   document.getElementById('overlay').classList.add('show');
   // keep last word visible behind overlay
 }
 
+function goToNextBatch(){
+  if(currentBatch!==null&&currentBatch<5){
+    selectBatch(currentBatch+1);
+    document.getElementById('overlay').classList.remove('show');
+    beginSession();
+  }
+}
+
 function startWrongOnly(){
+  if(activeVocab.length===0) return;
   const wrongWords=score.filter(s=>!s.correct).map(s=>s.word);
+  if(wrongWords.length===0) return;
+  if(currentBatch!==null) wrongSourceBatch=currentBatch;
   activeVocab=wrongWords;
   document.getElementById('overlay').classList.remove('show');
   setMode('write');
@@ -676,7 +787,10 @@ function buildReview(){
 }
 
 // ── EVENT WIRING ──
-document.getElementById('shuffle-btn').addEventListener('click',()=>beginSession(true));
+document.getElementById('shuffle-btn').addEventListener('click',()=>{
+  createBatches();
+  beginSession(true);
+});
 
 // mode slider
 function setMode(m){
@@ -686,7 +800,12 @@ function setMode(m){
   pill.classList.toggle('right',m==='write');
   document.getElementById('btn-choose').setAttribute('aria-pressed', m==='choose');
   document.getElementById('btn-write').setAttribute('aria-pressed', m==='write');
-  if(started&&!finished) beginSession();
+  if(started&&!finished){
+    queue=shuffle(activeVocab.map((_,i)=>i));
+    qIdx=0;
+    renderWord();
+    if(mode==='choose') renderChoose(); else renderWrite();
+  }
 }
 document.getElementById('btn-choose').addEventListener('click',()=>setMode('choose'));
 document.getElementById('btn-write').addEventListener('click',()=>setMode('write'));
@@ -699,6 +818,20 @@ document.getElementById('popup-close').addEventListener('click',()=>{
 
 // wrong only button
 document.getElementById('wrong-only-btn').addEventListener('click',()=>startWrongOnly());
+
+// next batch button
+document.getElementById('next-batch-btn').addEventListener('click',()=>goToNextBatch());
+
+// batch selector
+document.getElementById('batch-select').addEventListener('change',(e)=>{
+  if(started&&!finished&&score.length>0){
+    if(!confirm('Switch batch? Current progress will be lost.')){
+      e.target.value=currentBatch!==null?currentBatch:'';
+      return;
+    }
+  }
+  selectBatch(e.target.value);
+});
 
 // more link
 document.getElementById('more-link').addEventListener('click',()=>{
@@ -713,6 +846,9 @@ document.getElementById('more-link').addEventListener('keydown',e=>{
 document.getElementById('review-close').addEventListener('click',()=>{
   document.getElementById('review').classList.remove('show');
 });
+
+// Initialize batches on load
+createBatches();
 </script>
 </body>
 </html>
