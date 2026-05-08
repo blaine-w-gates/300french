@@ -470,6 +470,59 @@ let currentBatch = null;    // 0-5 for batch mode, null for full set
 let wrongSourceBatch = null;// Track which batch wrong words came from
 let completedBatches = [];  // Boolean array [false, false, ...]
 
+// ── PERSISTENCE ──
+const STORAGE_KEY = 'vocabBatchState';
+function saveBatchState(){
+  const state = {
+    batches,
+    currentBatch,
+    wrongSourceBatch,
+    completedBatches,
+    // Mid-session progress
+    qIdx,
+    score,
+    timerSec,
+    queue,
+    started,
+    mode,
+    timestamp: Date.now()
+  };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+function loadBatchState(){
+  try{
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if(!saved) return null;
+    const state = JSON.parse(saved);
+    if(!state.batches || state.batches.length !== 6) return null;
+    batches = state.batches;
+    currentBatch = state.currentBatch ?? null;
+    wrongSourceBatch = state.wrongSourceBatch ?? null;
+    completedBatches = state.completedBatches || [false,false,false,false,false,false];
+    if(currentBatch !== null && batches[currentBatch]){
+      activeVocab = wrongSourceBatch !== null ? batches[wrongSourceBatch] : batches[currentBatch];
+    }else{
+      activeVocab = VOCAB;
+    }
+    // Restore mid-session progress if exists
+    if(state.qIdx !== undefined) qIdx = state.qIdx;
+    if(state.score !== undefined) score = state.score;
+    if(state.timerSec !== undefined) timerSec = state.timerSec;
+    if(state.queue !== undefined) queue = state.queue;
+    if(state.started !== undefined) started = state.started;
+    if(state.mode !== undefined) mode = state.mode;
+    updateBatchIndicator();
+    updateStartHint();
+    return state;
+  }catch(e){
+    console.error('Failed to load batch state:', e);
+    return null;
+  }
+}
+function clearBatchState(){
+  localStorage.removeItem(STORAGE_KEY);
+}
+
 // ── HELPERS ──
 function shuffle(arr){
   const a=[...arr];
@@ -485,18 +538,23 @@ function stopTimer(){
   clearInterval(timerHandle);
   timerHandle=null;
 }
-function startTimer(){
+function startTimer(resume=false){
   stopTimer();
-  timerSec=0;
-  document.getElementById('timer').textContent='00:00';
+  if(!resume) timerSec=0;
+  document.getElementById('timer').textContent=fmtTime(timerSec);
   timerHandle=setInterval(()=>{
     timerSec++;
+    saveBatchState(); // Save timer periodically
     document.getElementById('timer').textContent=fmtTime(timerSec);
   },1000);
 }
 
 // ── BATCH CREATION ──
 function createBatches(){
+  // Check for saved state first
+  if(loadBatchState()){
+    return; // Restored from localStorage
+  }
   const shuffled = shuffle([...VOCAB]);
   const batchSize = Math.floor(shuffled.length / 6);
   const remainder = shuffled.length % 6;
@@ -511,6 +569,33 @@ function createBatches(){
   wrongSourceBatch = null;
   completedBatches = [false, false, false, false, false, false];
   updateBatchIndicator();
+  updateStartHint();
+}
+function createFreshBatches(){
+  clearBatchState();
+  const shuffled = shuffle([...VOCAB]);
+  const batchSize = Math.floor(shuffled.length / 6);
+  const remainder = shuffled.length % 6;
+  batches = [];
+  let idx = 0;
+  for(let i=0;i<6;i++){
+    const size = batchSize + (i < remainder ? 1 : 0);
+    batches.push(shuffled.slice(idx, idx + size));
+    idx += size;
+  }
+  currentBatch = null;
+  wrongSourceBatch = null;
+  completedBatches = [false, false, false, false, false, false];
+  activeVocab = VOCAB;
+  // Reset session state
+  qIdx=0;
+  score=[];
+  started=false;
+  finished=false;
+  timerSec=0;
+  stopTimer();
+  updateBatchIndicator();
+  updateStartHint();
 }
 
 // ── DISTRACTOR SELECTION ──
@@ -641,6 +726,7 @@ function handleWrite(inp,fb){
 
 function advance(){
   qIdx++;
+  saveBatchState(); // Persist progress after each answer
   if(qIdx>=activeVocab.length){
     endSession();
     return;
@@ -651,7 +737,26 @@ function advance(){
 }
 
 // ── SESSION CONTROL ──
-function beginSession(resetToFullList=false){
+function beginSession(resetToFullList=false,resumeFromSave=false){
+  // Check for saved session to resume
+  const saved=localStorage.getItem(STORAGE_KEY);
+  if(resumeFromSave&&saved){
+    const state=JSON.parse(saved);
+    if(state.started&&!state.finished&&state.qIdx>0&&state.qIdx<state.queue?.length){
+      // Restore session state
+      queue=state.queue;
+      qIdx=state.qIdx;
+      score=state.score||[];
+      timerSec=state.timerSec||0;
+      started=true;
+      finished=false;
+      renderWord();
+      updateBatchIndicator();
+      if(mode==='choose') renderChoose(); else renderWrite();
+      startTimer(true); // resume mode
+      return;
+    }
+  }
   if(started&&!finished){
     const done=score.length;
     if(done>0&&!confirm(`Reset? You've answered ${done} word${done===1?'':'s'}.`)) return;
@@ -686,6 +791,7 @@ function selectBatch(batchNum){
   }
   wrongSourceBatch=null;
   updateBatchIndicator();
+  saveBatchState();
   if(started&&!finished){
     beginSession();
   }else if(!started){
@@ -702,12 +808,54 @@ function updateBatchIndicator(){
   if(currentBatch!==null){
     const batchSize=activeVocab.length;
     const status=completedBatches[currentBatch]?'✓':'•';
-    ind.textContent=`${status} Batch ${currentBatch+1} (${batchSize} words)`;
+    const wrongCount=score.filter(s=>!s.correct).length;
+    const wrongText=wrongCount>0?` • ${wrongCount} wrong` : '';
+    ind.textContent=`${status} Batch ${currentBatch+1} (${batchSize} words${wrongText})`;
   }else if(wrongSourceBatch!==null){
-    ind.textContent=`Reviewing wrong from Batch ${wrongSourceBatch+1}`;
+    const remaining=activeVocab.length-qIdx;
+    ind.textContent=`Reviewing wrong from Batch ${wrongSourceBatch+1} (${remaining} left)`;
   }else{
-    ind.textContent='Full Set (300 words)';
+    const completed=completedBatches.filter(Boolean).length;
+    ind.textContent=completed>0?`Full Set (${completed}/6 batches done)`:'Full Set (300 words)';
   }
+}
+
+function updateStartHint(){
+  const hint=document.getElementById('start-hint');
+  if(!hint) return;
+  const hasSaved=!!localStorage.getItem(STORAGE_KEY);
+  const completed=completedBatches.filter(Boolean).length;
+  // Check for in-progress session (mid-batch)
+  const hasProgress=started&&qIdx>0&&qIdx<activeVocab.length;
+  const progressText=hasProgress?` (${qIdx}/${activeVocab.length} in current)` : '';
+  if(hasSaved && (completed>0||hasProgress)){
+    hint.innerHTML=`Welcome back! <strong>${completed}/6 batches</strong> completed${progressText}.<br><br>
+      <button id="resume-btn" style="background:var(--accent);border:none;border-radius:10px;color:#fff;font-family:'Outfit',sans-serif;font-size:15px;font-weight:600;padding:12px 24px;cursor:pointer;margin-right:10px;">Resume</button>
+      <button id="new-shuffle-btn" style="background:var(--surface2);border:1.5px solid var(--accent);border-radius:10px;color:var(--text);font-family:'Outfit',sans-serif;font-size:15px;font-weight:600;padding:12px 24px;cursor:pointer;">New Shuffle</button><br><br>
+      <a id="clear-progress-link" style="color:var(--muted);font-size:13px;cursor:pointer;text-decoration:underline;">Clear all progress</a>`;
+    document.getElementById('resume-btn').addEventListener('click',()=>beginSession(false,true));
+    document.getElementById('new-shuffle-btn').addEventListener('click',()=>{
+      createFreshBatches();
+      beginSession(true);
+    });
+    document.getElementById('clear-progress-link').addEventListener('click',()=>{
+      if(confirm('Clear all saved progress? This cannot be undone.')){
+        createFreshBatches();
+        document.getElementById('english-word').textContent='—';
+        document.getElementById('word-counter').textContent='';
+        document.getElementById('timer').textContent='00:00';
+      }
+    });
+  }else{
+    hint.innerHTML='Tap <strong>Shuffle</strong> to begin a<br/>timed 300-word session.';
+  }
+}
+
+function findNextUncompletedBatch(){
+  for(let i=0;i<6;i++){
+    if(!completedBatches[i]) return i;
+  }
+  return -1; // All completed
 }
 
 function endSession(){
@@ -719,27 +867,54 @@ function endSession(){
   document.getElementById('res-time').textContent=finalTime;
   document.getElementById('res-correct').textContent=correct;
   document.getElementById('res-wrong').textContent=wrong;
+  
+  // Check for all batches complete
+  const allBatchesComplete=completedBatches.every(Boolean);
+  
+  // Update title based on context
+  const popupTitle=document.querySelector('#overlay h2');
+  if(allBatchesComplete&&currentBatch!==null){
+    popupTitle.textContent='🎉 All Batches Complete! 🎉';
+  }else if(wrongSourceBatch!==null){
+    popupTitle.textContent=wrong===0?'Batch Review Complete!':'Session Complete';
+  }else{
+    popupTitle.textContent='Session Complete 🎉';
+  }
+  
   const wrongBtn=document.getElementById('wrong-only-btn');
   wrongBtn.classList.toggle('show',wrong>0);
   const nextBatchBtn=document.getElementById('next-batch-btn');
   if(nextBatchBtn){
-    const hasNextBatch=currentBatch!==null&&currentBatch<5&&!completedBatches[currentBatch+1];
+    const nextUncompleted=findNextUncompletedBatch();
+    const hasNextBatch=currentBatch!==null&&nextUncompleted!==-1&&nextUncompleted>currentBatch;
     const allCorrect=wrong===0;
     nextBatchBtn.classList.toggle('show',hasNextBatch&&allCorrect);
+    // Update button text if skipping ahead
+    if(hasNextBatch&&allCorrect&&nextUncompleted!==currentBatch+1){
+      nextBatchBtn.textContent=`Next Batch → (${nextUncompleted+1})`;
+    }else{
+      nextBatchBtn.textContent='Next Batch →';
+    }
   }
   if(currentBatch!==null&&wrong===0){
     completedBatches[currentBatch]=true;
     updateBatchIndicator();
   }
+  saveBatchState();
+  updateStartHint();
   document.getElementById('overlay').classList.add('show');
   // keep last word visible behind overlay
 }
 
 function goToNextBatch(){
-  if(currentBatch!==null&&currentBatch<5){
-    selectBatch(currentBatch+1);
+  const nextUncompleted=findNextUncompletedBatch();
+  if(nextUncompleted!==-1){
+    selectBatch(nextUncompleted);
     document.getElementById('overlay').classList.remove('show');
     beginSession();
+  }else{
+    // All batches complete - show message and stay on current
+    alert('🎉 Congratulations! You have completed all 6 batches!');
   }
 }
 
@@ -789,7 +964,11 @@ function buildReview(){
 
 // ── EVENT WIRING ──
 document.getElementById('shuffle-btn').addEventListener('click',()=>{
-  createBatches();
+  const allComplete=completedBatches.every(Boolean);
+  if(allComplete){
+    if(!confirm('All 6 batches completed! Start fresh with new shuffle?')) return;
+  }
+  createFreshBatches();
   beginSession(true);
 });
 
@@ -847,8 +1026,10 @@ document.getElementById('review-close').addEventListener('click',()=>{
   document.getElementById('review').classList.remove('show');
 });
 
-// Initialize batches on load
+// Initialize batches on load (will restore from localStorage if exists)
 createBatches();
+// Ensure start hint reflects loaded state
+updateStartHint();
 </script>
 </body>
 </html>
