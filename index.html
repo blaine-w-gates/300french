@@ -604,11 +604,12 @@ function advance(){
 }
 
 // ── SESSION CONTROL ──
-function beginSession(){
+function beginSession(resetToFullList=false){
   if(started&&!finished){
     const done=score.length;
     if(done>0&&!confirm(`Reset? You've answered ${done} word${done===1?'':'s'}.`)) return;
   }
+  if(resetToFullList) activeVocab=VOCAB;
   queue=shuffle(activeVocab.map((_,i)=>i));
   qIdx=0;
   score=[];
@@ -639,14 +640,7 @@ function startWrongOnly(){
   activeVocab=wrongWords;
   document.getElementById('overlay').classList.remove('show');
   setMode('write');
-  queue=shuffle(activeVocab.map((_,i)=>i));
-  qIdx=0;
-  score=[];
-  finished=false;
-  started=true;
-  renderWord();
-  renderWrite();
-  startTimer();
+  beginSession();
 }
 
 // ── REVIEW SCREEN ──
@@ -682,7 +676,7 @@ function buildReview(){
 }
 
 // ── EVENT WIRING ──
-document.getElementById('shuffle-btn').addEventListener('click',()=>{activeVocab=VOCAB;beginSession();});
+document.getElementById('shuffle-btn').addEventListener('click',()=>beginSession(true));
 
 // mode slider
 function setMode(m){
