@@ -76,7 +76,9 @@ body{display:flex;flex-direction:column;padding-top:var(--safe-top);padding-bott
 .stat{font-size:16px;margin-bottom:10px;color:var(--muted)}
 .stat span{color:var(--text);font-weight:700}
 #more-link{display:inline-block;margin-top:14px;color:var(--accent2);text-decoration:underline;font-size:15px;cursor:pointer}
-#popup-close{margin-top:20px;background:var(--surface2);border:none;border-radius:10px;color:var(--text);font-family:'Outfit',sans-serif;font-size:15px;font-weight:600;padding:12px 24px;cursor:pointer;width:100%}
+#popup-close{margin-top:12px;background:var(--surface2);border:none;border-radius:10px;color:var(--text);font-family:'Outfit',sans-serif;font-size:15px;font-weight:600;padding:12px 24px;cursor:pointer;width:100%}
+#wrong-only-btn{margin-top:12px;background:var(--accent);border:none;border-radius:10px;color:#fff;font-family:'Outfit',sans-serif;font-size:15px;font-weight:600;padding:12px 24px;cursor:pointer;width:100%;display:none}
+#wrong-only-btn.show{display:block}
 
 /* ── REVIEW SCREEN ── */
 #review{position:fixed;inset:0;background:var(--bg);z-index:200;display:flex;flex-direction:column;transform:translateY(100%);transition:transform .35s ease;padding-top:var(--safe-top);padding-bottom:var(--safe-bot)}
@@ -130,6 +132,7 @@ body{display:flex;flex-direction:column;padding-top:var(--safe-top);padding-bott
     <div class="stat">Correct: <span id="res-correct">—</span></div>
     <div class="stat">Incorrect: <span id="res-wrong">—</span></div>
     <div><a id="more-link" role="button" tabindex="0">more</a></div>
+    <button id="wrong-only-btn" aria-label="Practice wrong words">Only Wrong</button>
     <button id="popup-close" aria-label="Close results">Close</button>
   </div>
 </div>
@@ -436,6 +439,7 @@ let timerHandle = null;
 let started = false;
 let finished = false;
 let finalTime = '';
+let activeVocab = VOCAB;
 
 // ── HELPERS ──
 function shuffle(arr){
@@ -464,20 +468,20 @@ function startTimer(){
 
 // ── DISTRACTOR SELECTION ──
 function getDistractors(current){
-  const pool=VOCAB.filter((_,i)=>i!==queue[qIdx]&&VOCAB[i].gender===current.gender);
+  const pool=VOCAB.filter(w=>w.fr!==current.fr&&w.gender===current.gender);
   const picks=shuffle(pool).slice(0,2);
   return picks;
 }
 
 // ── RENDER ──
 function renderWord(){
-  const w=VOCAB[queue[qIdx]];
+  const w=activeVocab[queue[qIdx]];
   document.getElementById('english-word').textContent=w.en;
-  document.getElementById('word-counter').textContent=`${qIdx+1} / ${VOCAB.length}`;
+  document.getElementById('word-counter').textContent=`${qIdx+1} / ${activeVocab.length}`;
 }
 
 function renderChoose(){
-  const current=VOCAB[queue[qIdx]];
+  const current=activeVocab[queue[qIdx]];
   const distractors=getDistractors(current);
   const options=shuffle([current,...distractors]);
   const area=document.getElementById('interaction');
@@ -574,7 +578,7 @@ function renderWrite(){
 }
 
 function handleWrite(inp,fb){
-  const current=VOCAB[queue[qIdx]];
+  const current=activeVocab[queue[qIdx]];
   const answer=inp.value.trim().toLowerCase();
   // Full correct answer = article + space + word (e.g. "la voiture", "l'heure")
   const correct=(current.article+' '+current.fr).toLowerCase();
@@ -590,7 +594,7 @@ function handleWrite(inp,fb){
 
 function advance(){
   qIdx++;
-  if(qIdx>=VOCAB.length){
+  if(qIdx>=activeVocab.length){
     endSession();
     return;
   }
@@ -605,7 +609,7 @@ function beginSession(){
     const done=score.length;
     if(done>0&&!confirm(`Reset? You've answered ${done} word${done===1?'':'s'}.`)) return;
   }
-  queue=shuffle(VOCAB.map((_,i)=>i));
+  queue=shuffle(activeVocab.map((_,i)=>i));
   qIdx=0;
   score=[];
   finished=false;
@@ -624,8 +628,25 @@ function endSession(){
   document.getElementById('res-time').textContent=finalTime;
   document.getElementById('res-correct').textContent=correct;
   document.getElementById('res-wrong').textContent=wrong;
+  const wrongBtn=document.getElementById('wrong-only-btn');
+  wrongBtn.classList.toggle('show',wrong>0);
   document.getElementById('overlay').classList.add('show');
   // keep last word visible behind overlay
+}
+
+function startWrongOnly(){
+  const wrongWords=score.filter(s=>!s.correct).map(s=>s.word);
+  activeVocab=wrongWords;
+  document.getElementById('overlay').classList.remove('show');
+  setMode('write');
+  queue=shuffle(activeVocab.map((_,i)=>i));
+  qIdx=0;
+  score=[];
+  finished=false;
+  started=true;
+  renderWord();
+  renderWrite();
+  startTimer();
 }
 
 // ── REVIEW SCREEN ──
@@ -661,7 +682,7 @@ function buildReview(){
 }
 
 // ── EVENT WIRING ──
-document.getElementById('shuffle-btn').addEventListener('click',()=>beginSession());
+document.getElementById('shuffle-btn').addEventListener('click',()=>{activeVocab=VOCAB;beginSession();});
 
 // mode slider
 function setMode(m){
@@ -681,6 +702,9 @@ document.getElementById('popup-close').addEventListener('click',()=>{
   document.getElementById('overlay').classList.remove('show');
   // show last word + stopped timer (already in DOM)
 });
+
+// wrong only button
+document.getElementById('wrong-only-btn').addEventListener('click',()=>startWrongOnly());
 
 // more link
 document.getElementById('more-link').addEventListener('click',()=>{
