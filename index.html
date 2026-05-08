@@ -747,7 +747,8 @@ function startWrongOnly(){
   if(activeVocab.length===0) return;
   const wrongWords=score.filter(s=>!s.correct).map(s=>s.word);
   if(wrongWords.length===0) return;
-  if(currentBatch!==null) wrongSourceBatch=currentBatch;
+  // Only set wrongSourceBatch if not already tracking (prevents nesting overwrite)
+  if(wrongSourceBatch===null&&currentBatch!==null) wrongSourceBatch=currentBatch;
   activeVocab=wrongWords;
   document.getElementById('overlay').classList.remove('show');
   setMode('write');
@@ -801,8 +802,7 @@ function setMode(m){
   document.getElementById('btn-choose').setAttribute('aria-pressed', m==='choose');
   document.getElementById('btn-write').setAttribute('aria-pressed', m==='write');
   if(started&&!finished){
-    queue=shuffle(activeVocab.map((_,i)=>i));
-    qIdx=0;
+    // Keep current word position, just re-render in new mode
     renderWord();
     if(mode==='choose') renderChoose(); else renderWrite();
   }
