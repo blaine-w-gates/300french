@@ -757,10 +757,6 @@ function beginSession(resetToFullList=false,resumeFromSave=false){
       return;
     }
   }
-  if(started&&!finished){
-    const done=score.length;
-    if(done>0&&!confirm(`Reset? You've answered ${done} word${done===1?'':'s'}.`)) return;
-  }
   if(resetToFullList){
     activeVocab=VOCAB;
     currentBatch=null;
@@ -801,6 +797,8 @@ function selectBatch(batchNum){
     finished=false;
     beginSession();
   }else if(started&&!finished){
+    const done=score.length;
+    if(done>0&&!confirm(`Switch batch? You've answered ${done} word${done===1?'':'s'}. Progress will be lost.`)) return;
     beginSession();
   }else{
     document.getElementById('english-word').textContent='—';
