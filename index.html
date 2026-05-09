@@ -792,9 +792,17 @@ function selectBatch(batchNum){
   wrongSourceBatch=null;
   updateBatchIndicator();
   saveBatchState();
-  if(started&&!finished){
+
+  const popupOpen=document.getElementById('overlay').classList.contains('show');
+
+  if(popupOpen){
+    document.getElementById('overlay').classList.remove('show');
+    started=false;
+    finished=false;
     beginSession();
-  }else if(!started){
+  }else if(started&&!finished){
+    beginSession();
+  }else{
     document.getElementById('english-word').textContent='—';
     document.getElementById('word-counter').textContent='';
   }
@@ -909,14 +917,9 @@ function endSession(){
 function goToNextBatch(){
   const nextUncompleted=findNextUncompletedBatch();
   if(nextUncompleted!==-1){
-    // Reset session state before switching batches
-    started=false;
-    finished=false;
+    document.getElementById('batch-select').value=nextUncompleted;
     selectBatch(nextUncompleted);
-    document.getElementById('overlay').classList.remove('show');
-    beginSession();
   }else{
-    // All batches complete - show message and stay on current
     alert('🎉 Congratulations! You have completed all 6 batches!');
   }
 }
@@ -967,12 +970,11 @@ function buildReview(){
 
 // ── EVENT WIRING ──
 document.getElementById('shuffle-btn').addEventListener('click',()=>{
-  const allComplete=completedBatches.every(Boolean);
-  if(allComplete){
-    if(!confirm('All 6 batches completed! Start fresh with new shuffle?')) return;
+  if(started&&!finished&&score.length>0){
+    if(!confirm('Restart current session? Progress will be lost.')) return;
   }
-  createFreshBatches();
-  beginSession(true);
+  // Let beginSession handle the array shuffling naturally based on the current activeVocab context
+  beginSession();
 });
 
 // mode slider
