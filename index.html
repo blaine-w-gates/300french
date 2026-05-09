@@ -909,6 +909,9 @@ function endSession(){
 function goToNextBatch(){
   const nextUncompleted=findNextUncompletedBatch();
   if(nextUncompleted!==-1){
+    // Reset session state before switching batches
+    started=false;
+    finished=false;
     selectBatch(nextUncompleted);
     document.getElementById('overlay').classList.remove('show');
     beginSession();
