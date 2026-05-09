@@ -59,7 +59,7 @@ body{display:flex;flex-direction:column;padding-top:var(--safe-top);padding-bott
 
 /* WRITE INPUT */
 #write-form{display:flex;gap:10px;width:100%}
-#write-input{flex:1;background:var(--surface);border:1.5px solid var(--surface2);border-radius:12px;color:var(--text);font-family:'Outfit',sans-serif;font-size:17px;padding:14px 16px;outline:none;transition:border-color .2s;-webkit-appearance:none}
+#write-input{flex:1;background:var(--surface);border:1.5px solid var(--surface2);border-radius:12px;color:var(--text);font-family:'Outfit',sans-serif;font-size:17px;padding:14px 16px;outline:none;transition:border-color .2s;-webkit-appearance:none;appearance:none}
 #write-input:focus{border-color:var(--accent)}
 #write-submit{min-width:48px;min-height:48px;background:var(--accent);border:none;border-radius:12px;color:#fff;font-size:20px;cursor:pointer;transition:background .2s}
 #write-submit:active{background:var(--accent2)}
@@ -102,6 +102,11 @@ body{display:flex;flex-direction:column;padding-top:var(--safe-top);padding-bott
 #batch-select{flex:1;background:var(--surface);border:1.5px solid var(--surface2);border-radius:10px;color:var(--text);font-family:'Outfit',sans-serif;font-size:14px;padding:10px 14px;cursor:pointer;outline:none}
 #batch-select:focus{border-color:var(--accent)}
 #batch-indicator{font-size:12px;color:var(--accent2);font-weight:600;white-space:nowrap}
+/* ── 6-DOT PROGRESS ── */
+#batch-progress{display:flex;justify-content:center;gap:8px;padding:8px 20px 0;flex-shrink:0}
+.batch-dot{width:10px;height:10px;border-radius:50%;background:var(--surface2);transition:background .2s}
+.batch-dot.completed{background:var(--correct)}
+.batch-dot.current{background:var(--accent);box-shadow:0 0 0 2px var(--accent2)}
 </style>
 </head>
 <body>
@@ -127,6 +132,16 @@ body{display:flex;flex-direction:column;padding-top:var(--safe-top);padding-bott
     <option value="5">Batch 6 (~50 words)</option>
   </select>
   <div id="batch-indicator"></div>
+</div>
+
+<!-- 6-DOT PROGRESS -->
+<div id="batch-progress">
+  <div class="batch-dot" data-batch="0"></div>
+  <div class="batch-dot" data-batch="1"></div>
+  <div class="batch-dot" data-batch="2"></div>
+  <div class="batch-dot" data-batch="3"></div>
+  <div class="batch-dot" data-batch="4"></div>
+  <div class="batch-dot" data-batch="5"></div>
 </div>
 
 <!-- WORD + SHUFFLE -->
@@ -478,6 +493,8 @@ function saveBatchState(){
     currentBatch,
     wrongSourceBatch,
     completedBatches,
+    activeVocab, // CRITICAL: Save the actual active vocabulary list
+    isWrongOnlySession: wrongSourceBatch!==null&&activeVocab.length!==batches[wrongSourceBatch]?.length,
     // Mid-session progress
     qIdx,
     score,
@@ -499,8 +516,11 @@ function loadBatchState(){
     currentBatch = state.currentBatch ?? null;
     wrongSourceBatch = state.wrongSourceBatch ?? null;
     completedBatches = state.completedBatches || [false,false,false,false,false,false];
-    if(currentBatch !== null && batches[currentBatch]){
-      activeVocab = wrongSourceBatch !== null ? batches[wrongSourceBatch] : batches[currentBatch];
+    // CRITICAL FIX: Restore activeVocab directly if it was saved (for wrong-only sessions)
+    if(state.isWrongOnlySession && state.activeVocab && state.activeVocab.length > 0){
+      activeVocab = state.activeVocab;
+    }else if(currentBatch !== null && batches[currentBatch]){
+      activeVocab = batches[currentBatch];
     }else{
       activeVocab = VOCAB;
     }
@@ -801,8 +821,8 @@ function selectBatch(batchNum){
     if(done>0&&!confirm(`Switch batch? You've answered ${done} word${done===1?'':'s'}. Progress will be lost.`)) return;
     beginSession();
   }else{
-    document.getElementById('english-word').textContent='—';
-    document.getElementById('word-counter').textContent='';
+    // Idle: auto-start the batch instead of showing blank
+    beginSession();
   }
 }
 
@@ -824,6 +844,13 @@ function updateBatchIndicator(){
     const completed=completedBatches.filter(Boolean).length;
     ind.textContent=completed>0?`Full Set (${completed}/6 batches done)`:'Full Set (300 words)';
   }
+  // Update 6-dot progress
+  const dots=document.querySelectorAll('.batch-dot');
+  dots.forEach((dot,i)=>{
+    dot.classList.remove('completed','current');
+    if(completedBatches[i]) dot.classList.add('completed');
+    if(currentBatch===i) dot.classList.add('current');
+  });
 }
 
 function updateStartHint(){
