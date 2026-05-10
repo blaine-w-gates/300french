@@ -674,13 +674,20 @@ function getBestVoice(lang){
   const isFrench=lang.startsWith('fr');
   const isMac=/Mac/.test(navigator.userAgent);
   
+  console.log('Voice Selection Debug:', { isMac, isFrench, totalVoices: speechVoices.length });
+  
   const qualityVoices=speechVoices.filter(v=>{
     const name=v.name||'';
     // On Mac, local voices (Thomas/Audrey) are more reliable than Google Cloud voices
-    return isMac 
+    const isQuality=isMac 
       ? (name.includes('Premium')||name.includes('Enhanced')||name.includes('Thomas')||name.includes('Audrey'))
       : (name.includes('Premium')||name.includes('Enhanced')||name.includes('Google'));
+    if(isQuality) console.log('Found quality voice:', name, v.lang);
+    return isQuality;
   });
+  
+  console.log('Quality voices count:', qualityVoices.length);
+  
   // Find quality voice matching language
   const langQuality=qualityVoices.find(v=>v.lang&&v.lang.startsWith(lang));
   if(langQuality){
