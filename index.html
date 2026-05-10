@@ -178,7 +178,7 @@ body{display:flex;flex-direction:column;padding-top:var(--safe-top);padding-bott
 .speak-btn:active{transform:scale(.9);background:var(--surface2)}
 
 /* ── TOAST NOTIFICATION ── */
-.toast-notification{position:fixed;bottom:120px;left:50%;transform:translateX(-50%);background:var(--surface2);color:var(--text);padding:12px 20px;border-radius:var(--radius);z-index:2000;opacity:0;transition:opacity .3s;pointer-events:auto;font-size:14px;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,.3)}
+.toast-notification{position:fixed;bottom:120px;left:50%;transform:translateX(-50%);background:rgba(26,26,46,0.95);color:var(--text);padding:16px 24px;border-radius:12px;z-index:9000;opacity:0;transition:opacity .4s;pointer-events:auto;font-size:14px;line-height:1.5;white-space:normal;width:90%;max-width:340px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,.4);border:1px solid rgba(255,255,255,0.1)}
 .toast-notification.show{opacity:1}
 </style>
 </head>
@@ -717,7 +717,7 @@ function showToast(){
   const toast=document.getElementById('audio-toast');
   if(!toast) return;
   toast.classList.add('show');
-  setTimeout(()=>{toast.classList.remove('show');},4000);
+  setTimeout(()=>{toast.classList.remove('show');},8000);
 }
 
 function hasQualityVoice(){
@@ -731,7 +731,7 @@ function showQualityHint(){
   const toast=document.getElementById('quality-toast');
   if(!toast) return;
   toast.classList.add('show');
-  setTimeout(()=>{toast.classList.remove('show');},6000);
+  setTimeout(()=>{toast.classList.remove('show');},12000);
 }
 
 function speak(text,lang='fr-FR'){
@@ -774,10 +774,11 @@ function speak(text,lang='fr-FR'){
     window.speechSynthesis.cancel();
   }
 
-  // A+ Surgical Option 3: Use high-quality Google TTS stream ONLY for Chrome Mac with robotic voices
+  // A+ Surgical Option 3: Force high-quality Google TTS stream for Chrome Mac
   const isChromeMac=/Mac/.test(navigator.userAgent) && /Chrome/.test(navigator.userAgent);
-  if(isChromeMac && !hasQualityVoice()){
-    console.log('Surgical Fallback: Using high-quality Google Neural stream for Chrome Mac...');
+  // Force neural stream for ALL Chrome Mac users because the native cloud voice is unreliable
+  if(isChromeMac){
+    console.log('Surgical Fallback: Forcing high-quality Google Neural stream for Chrome Mac stability...');
     const url=`https://translate.google.com/translate_tts?ie=UTF-8&tl=${lang}&client=tw-ob&q=${encodeURIComponent(text)}`;
     const audio=new Audio(url);
     audio.play().catch(err=>{
