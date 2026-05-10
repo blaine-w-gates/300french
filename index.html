@@ -684,11 +684,17 @@ function getBestVoice(lang){
   
   console.log('Quality voices count:', qualityVoices.length);
   
-  // Find quality voice matching language
-  const langQuality=qualityVoices.find(v=>v.lang&&v.lang.startsWith(lang));
-  if(langQuality){
-    console.log('Selected quality voice:', langQuality.name, langQuality.lang);
-    return langQuality;
+  // A+: Strict Priority Search to ensure Google > Premium > Thomas
+  const priorities = isFrench 
+    ? ['Google', 'Premium', 'Enhanced', 'Thomas', 'Audrey'] 
+    : ['Google', 'Premium', 'Enhanced', 'Samantha', 'Alex'];
+  
+  for (const p of priorities) {
+    const found = qualityVoices.find(v => v.name.includes(p) && v.lang.startsWith(lang));
+    if (found) {
+      console.log('Selected priority quality voice:', found.name, found.lang);
+      return found;
+    }
   }
   // Fall back to named voices
   const preferred=isFrench?['Thomas','Audrey','Amélie','Marie','Virginie']:['Samantha','Alex'];
