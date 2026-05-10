@@ -767,6 +767,7 @@ function speak(text,lang='fr-FR'){
       showQualityHint();
       localStorage.setItem('qualityHintShown','true');
     }
+  }
   // Chrome Mac fix: Only cancel if actually speaking
   const isSpeaking=window.speechSynthesis.speaking;
   if(isSpeaking){
