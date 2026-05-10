@@ -168,6 +168,10 @@ body{display:flex;flex-direction:column;padding-top:var(--safe-top);padding-bott
 .batch-dot{width:10px;height:10px;border-radius:50%;background:var(--surface2);transition:background .2s}
 .batch-dot.completed{background:var(--correct)}
 .batch-dot.current{background:var(--accent);box-shadow:0 0 0 2px var(--accent2)}
+
+/* ── SPEAK BUTTON ── */
+.speak-btn{background:none;border:none;color:var(--accent2);font-size:16px;cursor:pointer;padding:4px 8px;border-radius:6px;transition:transform .1s,background .2s;min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center}
+.speak-btn:active{transform:scale(.9);background:var(--surface2)}
 </style>
 </head>
 <body>
@@ -546,6 +550,10 @@ let currentBatch = null;    // 0-5 for batch mode, null for full set
 let wrongSourceBatch = null;// Track which batch wrong words came from
 let completedBatches = [];  // Boolean array [false, false, ...]
 
+// ── SPEECH STATE ──
+let speechVoices=[];
+let speechInitialized=false;
+
 // ── PERSISTENCE ──
 const STORAGE_KEY = 'vocabBatchState';
 function saveBatchState(){
@@ -631,6 +639,44 @@ function startTimer(resume=false){
 }
 
 // ── BATCH CREATION ──
+function initSpeech(){
+  if(speechInitialized||!window.speechSynthesis) return;
+  speechVoices=window.speechSynthesis.getVoices();
+  if(speechVoices.length===0){
+    window.speechSynthesis.onvoiceschanged=()=>{
+      speechVoices=window.speechSynthesis.getVoices();
+    };
+  }
+  speechInitialized=true;
+  // Pre-warm iOS audio engine
+  const warmup=new SpeechSynthesisUtterance('');
+  window.speechSynthesis.speak(warmup);
+  window.speechSynthesis.cancel();
+}
+
+function getBestVoice(lang){
+  const preferred=lang.startsWith('fr')?['Thomas','Audrey','Amélie']:['Samantha','Alex'];
+  for(const name of preferred){
+    const voice=speechVoices.find(v=>v.name.includes(name));
+    if(voice) return voice;
+  }
+  return speechVoices.find(v=>v.lang.startsWith(lang))||speechVoices[0];
+}
+
+function speak(text,lang='fr-FR'){
+  if(!window.speechSynthesis) return;
+  if(!speechInitialized) initSpeech();
+  // iOS queue bug fix: cancel before speaking
+  window.speechSynthesis.cancel();
+  setTimeout(()=>{
+    const u=new SpeechSynthesisUtterance(text);
+    u.lang=lang;
+    u.voice=getBestVoice(lang);
+    u.rate=0.9;
+    window.speechSynthesis.speak(u);
+  },50);
+}
+
 function createBatches(){
   // Check for saved state first
   if(loadBatchState()){
@@ -1045,7 +1091,8 @@ function buildReview(){
 
     const cor=document.createElement('div');
     cor.className='review-correct';
-    cor.textContent=`${s.word.article} ${s.word.fr}`;
+    cor.innerHTML=`<button class="speak-btn" data-text="${s.word.article} ${s.word.fr}" aria-label="Listen">🔊</button> <span>${s.word.article} ${s.word.fr}</span>`;
+    cor.querySelector('.speak-btn').onclick=(e)=>{ e.stopPropagation(); speak(`${s.word.article} ${s.word.fr}`); };
 
     row.appendChild(en);
     row.appendChild(res);
@@ -1056,6 +1103,8 @@ function buildReview(){
 
 // ── EVENT WIRING ──
 document.getElementById('shuffle-btn').addEventListener('click',()=>{
+  // Initialize speech on first user gesture (required for iOS)
+  if(!speechInitialized) initSpeech();
   if(started&&!finished&&score.length>0){
     if(!confirm('Restart current session? Progress will be lost.')) return;
   }
