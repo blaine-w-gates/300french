@@ -67,8 +67,10 @@ The app uses a completely local, persistent state machine.
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="mobile-web-app-capable" content="yes"/>
 <meta name="description" content="French vocabulary flashcard app – Choose or Write mode, 300 words, timed sessions."/>
 <title>French Flash</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🇫🇷</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Playfair+Display:wght@500;700&display=swap" rel="stylesheet"/>
 <style>
@@ -675,14 +677,22 @@ function getBestVoice(lang){
   });
   // Find quality voice matching language
   const langQuality=qualityVoices.find(v=>v.lang&&v.lang.startsWith(lang));
-  if(langQuality) return langQuality;
+  if(langQuality){
+    console.log('Selected quality voice:', langQuality.name, langQuality.lang);
+    return langQuality;
+  }
   // Fall back to named voices
   const preferred=isFrench?['Thomas','Audrey','Amélie','Marie','Virginie']:['Samantha','Alex'];
   for(const name of preferred){
     const voice=speechVoices.find(v=>v.name.includes(name));
-    if(voice) return voice;
+    if(voice){
+      console.log('Selected named voice:', voice.name, voice.lang);
+      return voice;
+    }
   }
-  return speechVoices.find(v=>v.lang.startsWith(lang))||speechVoices[0];
+  const fallback=speechVoices.find(v=>v.lang&&v.lang.startsWith(lang))||speechVoices[0];
+  console.log('Selected fallback voice:', fallback?.name, fallback?.lang);
+  return fallback;
 }
 
 function showToast(){
@@ -711,9 +721,22 @@ function speak(text,lang='fr-FR'){
     console.warn('Web Speech API not supported');
     return;
   }
-  // iOS aggressive GC fix: re-check voices if empty
-  if(speechVoices.length===0) speechVoices=window.speechSynthesis.getVoices();
-  if(!speechInitialized) initSpeech();
+  // Chrome Mac fix: Force init if voices empty, even if already initialized
+  if(!speechInitialized || speechVoices.length===0){
+    initSpeech();
+    // Chrome Mac: voices may still be loading, force another getVoices call
+    if(speechVoices.length===0){
+      speechVoices=window.speechSynthesis.getVoices();
+    }
+  }
+  
+  // Debug logging for Chrome Mac issues
+  console.log('Speech Debug:', {
+    speechInitialized,
+    voiceCount: speechVoices.length,
+    selectedVoice: getBestVoice(lang)?.name || 'NONE FOUND',
+    isChromeMac: /Mac/.test(navigator.userAgent) && /Chrome/.test(navigator.userAgent)
+  });
   
   // Show audio toast on first use
   if(!localStorage.getItem('audioToastShown')){
@@ -727,22 +750,21 @@ function speak(text,lang='fr-FR'){
       localStorage.setItem('qualityHintShown','true');
     }
   }
-  // iOS queue bug fix: cancel before speaking
   window.speechSynthesis.cancel();
   setTimeout(()=>{
     const u=new SpeechSynthesisUtterance(text);
-    u.lang=lang;
-    u.voice=getBestVoice(lang);
+    const selectedVoice=getBestVoice(lang);
+    u.voice=selectedVoice;
+    // Force lang match to voice to prevent Chrome "mismatch" errors
+    u.lang=selectedVoice ? selectedVoice.lang : lang;
     u.rate=0.9;
     // Add error handling
     u.onerror=(e)=>{
-      console.error('Speech synthesis error:', e);
-    };
-    u.onend=()=>{
-      console.log('Speech completed successfully');
+      console.error('Speech synthesis error:', e.error || 'Unknown Error', e);
+      console.error('Failed Utterance Details:', { text, lang: u.lang, voice: u.voice?.name });
     };
     window.speechSynthesis.speak(u);
-  },50);
+  },150); // Increased from 50ms for Chrome Mac stability
 }
 
 function createBatches(){
