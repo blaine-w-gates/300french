@@ -183,7 +183,7 @@ body{display:flex;flex-direction:column;padding-top:var(--safe-top);padding-bott
 <body>
 
 <!-- AUDIO TOAST -->
-<div id="audio-toast" class="toast-notification" onclick="this.style.display='none'">🔇 If you hear nothing, check your iPhone's silent switch. (Tap to close)</div>
+<div id="audio-toast" class="toast-notification" onclick="this.style.display='none'">🔇 If you hear nothing, check your device audio settings. (Tap to close)</div>
 
 <!-- MODE SLIDER -->
 <div id="mode-bar">
@@ -690,7 +690,10 @@ function showToast(){
 }
 
 function speak(text,lang='fr-FR'){
-  if(!window.speechSynthesis) return;
+  if(!window.speechSynthesis){
+    console.warn('Web Speech API not supported');
+    return;
+  }
   // iOS aggressive GC fix: re-check voices if empty
   if(speechVoices.length===0) speechVoices=window.speechSynthesis.getVoices();
   if(!speechInitialized) initSpeech();
@@ -706,6 +709,13 @@ function speak(text,lang='fr-FR'){
     u.lang=lang;
     u.voice=getBestVoice(lang);
     u.rate=0.9;
+    // Add error handling
+    u.onerror=(e)=>{
+      console.error('Speech synthesis error:', e);
+    };
+    u.onend=()=>{
+      console.log('Speech completed successfully');
+    };
     window.speechSynthesis.speak(u);
   },50);
 }
