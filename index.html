@@ -36,6 +36,8 @@ The app uses a completely local, persistent state machine.
 | queue | activeVocab.length | Indices become invalid and crash the app if activeVocab is mutated without a queue reset. |
 | started/finished | Session lifecycle | Must reset *before* calling selectBatch() or any session-initiating function. |
 | wrongSourceBatch | currentBatch | Check === null before setting it when entering wrong-only to prevent nesting overwrites. |
+| speechInitialized | User gesture (Shuffle/speaker tap) | Must be true before any audio plays on iOS. Check before speak(). |
+| speechVoices | window.speechSynthesis | Must re-check .length===0 before each speak() for iOS GC bug. |
 
 ### Common Regression Risks
 - Double Prompt: When adding confirmation logic, check if beginSession() already has a similar check. (It currently does not, by design, so rely on caller logic).
@@ -172,9 +174,16 @@ body{display:flex;flex-direction:column;padding-top:var(--safe-top);padding-bott
 /* ── SPEAK BUTTON ── */
 .speak-btn{background:none;border:none;color:var(--accent2);font-size:16px;cursor:pointer;padding:4px 8px;border-radius:6px;transition:transform .1s,background .2s;min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center}
 .speak-btn:active{transform:scale(.9);background:var(--surface2)}
+
+/* ── TOAST NOTIFICATION ── */
+.toast-notification{position:fixed;bottom:120px;left:50%;transform:translateX(-50%);background:var(--surface2);color:var(--text);padding:12px 20px;border-radius:var(--radius);z-index:2000;opacity:0;transition:opacity .3s;pointer-events:auto;font-size:14px;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,.3)}
+.toast-notification.show{opacity:1}
 </style>
 </head>
 <body>
+
+<!-- AUDIO TOAST -->
+<div id="audio-toast" class="toast-notification" onclick="this.style.display='none'">🔇 If you hear nothing, check your iPhone's silent switch. (Tap to close)</div>
 
 <!-- MODE SLIDER -->
 <div id="mode-bar">
@@ -663,9 +672,23 @@ function getBestVoice(lang){
   return speechVoices.find(v=>v.lang.startsWith(lang))||speechVoices[0];
 }
 
+function showToast(){
+  const toast=document.getElementById('audio-toast');
+  if(!toast) return;
+  toast.classList.add('show');
+  setTimeout(()=>{toast.classList.remove('show');},4000);
+}
+
 function speak(text,lang='fr-FR'){
   if(!window.speechSynthesis) return;
+  // iOS aggressive GC fix: re-check voices if empty
+  if(speechVoices.length===0) speechVoices=window.speechSynthesis.getVoices();
   if(!speechInitialized) initSpeech();
+  // Show toast on first use
+  if(!localStorage.getItem('audioToastShown')){
+    showToast();
+    localStorage.setItem('audioToastShown','true');
+  }
   // iOS queue bug fix: cancel before speaking
   window.speechSynthesis.cancel();
   setTimeout(()=>{
@@ -1091,8 +1114,16 @@ function buildReview(){
 
     const cor=document.createElement('div');
     cor.className='review-correct';
-    cor.innerHTML=`<button class="speak-btn" data-text="${s.word.article} ${s.word.fr}" aria-label="Listen">🔊</button> <span>${s.word.article} ${s.word.fr}</span>`;
-    cor.querySelector('.speak-btn').onclick=(e)=>{ e.stopPropagation(); speak(`${s.word.article} ${s.word.fr}`); };
+    if(window.speechSynthesis){
+      cor.innerHTML=`<button class="speak-btn" aria-label="Listen">🔊</button> <span>${s.word.article} ${s.word.fr}</span>`;
+      cor.querySelector('.speak-btn').onclick=(e)=>{
+        e.stopPropagation();
+        if(!speechInitialized) initSpeech(); // Robust iOS gesture unlock
+        speak(`${s.word.article} ${s.word.fr}`);
+      };
+    } else {
+      cor.textContent=`${s.word.article} ${s.word.fr}`;
+    }
 
     row.appendChild(en);
     row.appendChild(res);
