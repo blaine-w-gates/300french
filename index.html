@@ -744,7 +744,10 @@ function speak(text,lang='fr-FR'){
     u.lang=lang;
     u.rate=0.9;
     u.onerror=(e)=>{
-      console.error('Speech error:', e.error);
+      // Ignore "interrupted" errors as they are a normal side effect of .cancel()
+      if (e.error !== 'interrupted') {
+        console.error('Speech error:', e.error);
+      }
     };
     window.speechSynthesis.speak(u);
   }, 100);
