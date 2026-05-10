@@ -678,12 +678,8 @@ function getBestVoice(lang){
   
   const qualityVoices=speechVoices.filter(v=>{
     const name=v.name||'';
-    // On Mac, local voices (Thomas/Audrey) are more reliable than Google Cloud voices
-    const isQuality=isMac 
-      ? (name.includes('Premium')||name.includes('Enhanced')||name.includes('Thomas')||name.includes('Audrey'))
-      : (name.includes('Premium')||name.includes('Enhanced')||name.includes('Google'));
-    if(isQuality) console.log('Found quality voice:', name, v.lang);
-    return isQuality;
+    // Prioritize Google Cloud voices for "Jenny" quality, but keep local Premium/Thomas as fallbacks
+    return name.includes('Google') || name.includes('Premium') || name.includes('Enhanced') || name.includes('Thomas') || name.includes('Audrey');
   });
   
   console.log('Quality voices count:', qualityVoices.length);
