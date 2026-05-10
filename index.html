@@ -767,32 +767,45 @@ function speak(text,lang='fr-FR'){
       showQualityHint();
       localStorage.setItem('qualityHintShown','true');
     }
-  }
-  // Chrome Mac fix: Only cancel if actually speaking, and add longer delay
+  // Chrome Mac fix: Only cancel if actually speaking
   const isSpeaking=window.speechSynthesis.speaking;
   if(isSpeaking){
     window.speechSynthesis.cancel();
   }
-  // Chrome Mac needs longer delay after cancel
+
+  // A+ Surgical Option 3: Use high-quality Google TTS stream ONLY for Chrome Mac with robotic voices
+  const isChromeMac=/Mac/.test(navigator.userAgent) && /Chrome/.test(navigator.userAgent);
+  if(isChromeMac && !hasQualityVoice()){
+    console.log('Surgical Fallback: Using high-quality Google Neural stream for Chrome Mac...');
+    const url=`https://translate.google.com/translate_tts?ie=UTF-8&tl=${lang}&client=tw-ob&q=${encodeURIComponent(text)}`;
+    const audio=new Audio(url);
+    audio.play().catch(err=>{
+      console.warn('Google Neural stream failed or offline. Falling back to local Web Speech API...', err);
+      // Fallback to existing local logic if network fails
+      speakLocal(text, lang, isSpeaking);
+    });
+    return;
+  }
+  
+  speakLocal(text, lang, isSpeaking);
+}
+
+function speakLocal(text, lang, isSpeaking){
   const delay=isSpeaking ? 300 : 50;
   setTimeout(()=>{
     activeUtterance=new SpeechSynthesisUtterance(text);
     const selectedVoice=getBestVoice(lang);
     activeUtterance.voice=selectedVoice;
-    // Force lang match to voice to prevent Chrome "mismatch" errors
     activeUtterance.lang=selectedVoice ? selectedVoice.lang : lang;
     activeUtterance.rate=0.9;
     
-    // Add error handling
     activeUtterance.onerror=(e)=>{
       console.error('Speech synthesis error:', e.error || 'Unknown Error', e);
-      console.error('Failed Utterance Details:', { text, lang: activeUtterance.lang, voice: activeUtterance.voice?.name, isSpeakingBefore: isSpeaking });
-      
-      // A+ Recovery: If a cloud voice (Google) fails, blacklist it and retry with a local voice
+      // A+ Recovery: If a cloud voice (Google) fails, blacklist it and retry
       if(selectedVoice && selectedVoice.name.includes('Google') && (e.error === 'interrupted' || e.error === 'network')){
-        console.warn(`Cloud voice [${selectedVoice.name}] failed. Blacklisting and retrying with local fallback...`);
+        console.warn(`Cloud voice [${selectedVoice.name}] failed. Blacklisting and retrying...`);
         voiceBlacklist.add(selectedVoice.name);
-        speak(text, lang); // Recursive call will now pick a non-blacklisted voice
+        speak(text, lang); 
       }
     };
     
