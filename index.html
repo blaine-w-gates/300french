@@ -567,6 +567,7 @@ let completedBatches = [];  // Boolean array [false, false, ...]
 // ── SPEECH STATE ──
 let speechVoices=[];
 let speechInitialized=false;
+let activeUtterance=null; // A+ Fix: Global reference to prevent Chrome GC bug
 
 // ── PERSISTENCE ──
 const STORAGE_KEY = 'vocabBatchState';
@@ -671,9 +672,14 @@ function initSpeech(){
 function getBestVoice(lang){
   // A+ Fix: Prioritize Premium/Enhanced/Google voices for quality
   const isFrench=lang.startsWith('fr');
+  const isMac=/Mac/.test(navigator.userAgent);
+  
   const qualityVoices=speechVoices.filter(v=>{
     const name=v.name||'';
-    return name.includes('Premium')||name.includes('Enhanced')||name.includes('Google');
+    // On Mac, local voices (Thomas/Audrey) are more reliable than Google Cloud voices
+    return isMac 
+      ? (name.includes('Premium')||name.includes('Enhanced')||name.includes('Thomas')||name.includes('Audrey'))
+      : (name.includes('Premium')||name.includes('Enhanced')||name.includes('Google'));
   });
   // Find quality voice matching language
   const langQuality=qualityVoices.find(v=>v.lang&&v.lang.startsWith(lang));
@@ -758,18 +764,20 @@ function speak(text,lang='fr-FR'){
   // Chrome Mac needs longer delay after cancel
   const delay=isSpeaking ? 300 : 50;
   setTimeout(()=>{
-    const u=new SpeechSynthesisUtterance(text);
+    activeUtterance=new SpeechSynthesisUtterance(text);
     const selectedVoice=getBestVoice(lang);
-    u.voice=selectedVoice;
+    activeUtterance.voice=selectedVoice;
     // Force lang match to voice to prevent Chrome "mismatch" errors
-    u.lang=selectedVoice ? selectedVoice.lang : lang;
-    u.rate=0.9;
+    activeUtterance.lang=selectedVoice ? selectedVoice.lang : lang;
+    activeUtterance.rate=0.9;
+    
     // Add error handling
-    u.onerror=(e)=>{
+    activeUtterance.onerror=(e)=>{
       console.error('Speech synthesis error:', e.error || 'Unknown Error', e);
-      console.error('Failed Utterance Details:', { text, lang: u.lang, voice: u.voice?.name, isSpeakingBefore: isSpeaking });
+      console.error('Failed Utterance Details:', { text, lang: activeUtterance.lang, voice: activeUtterance.voice?.name, isSpeakingBefore: isSpeaking });
     };
-    window.speechSynthesis.speak(u);
+    
+    window.speechSynthesis.speak(activeUtterance);
   },delay);
 }
 
