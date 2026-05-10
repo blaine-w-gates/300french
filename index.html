@@ -750,7 +750,13 @@ function speak(text,lang='fr-FR'){
       localStorage.setItem('qualityHintShown','true');
     }
   }
-  window.speechSynthesis.cancel();
+  // Chrome Mac fix: Only cancel if actually speaking, and add longer delay
+  const isSpeaking=window.speechSynthesis.speaking;
+  if(isSpeaking){
+    window.speechSynthesis.cancel();
+  }
+  // Chrome Mac needs longer delay after cancel
+  const delay=isSpeaking ? 300 : 50;
   setTimeout(()=>{
     const u=new SpeechSynthesisUtterance(text);
     const selectedVoice=getBestVoice(lang);
@@ -761,10 +767,10 @@ function speak(text,lang='fr-FR'){
     // Add error handling
     u.onerror=(e)=>{
       console.error('Speech synthesis error:', e.error || 'Unknown Error', e);
-      console.error('Failed Utterance Details:', { text, lang: u.lang, voice: u.voice?.name });
+      console.error('Failed Utterance Details:', { text, lang: u.lang, voice: u.voice?.name, isSpeakingBefore: isSpeaking });
     };
     window.speechSynthesis.speak(u);
-  },150); // Increased from 50ms for Chrome Mac stability
+  },delay);
 }
 
 function createBatches(){
