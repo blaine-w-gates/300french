@@ -664,7 +664,17 @@ function initSpeech(){
 }
 
 function getBestVoice(lang){
-  const preferred=lang.startsWith('fr')?['Thomas','Audrey','Amélie']:['Samantha','Alex'];
+  // A+ Fix: Prioritize Premium/Enhanced/Google voices for quality
+  const isFrench=lang.startsWith('fr');
+  const qualityVoices=speechVoices.filter(v=>{
+    const name=v.name||'';
+    return name.includes('Premium')||name.includes('Enhanced')||name.includes('Google');
+  });
+  // Find quality voice matching language
+  const langQuality=qualityVoices.find(v=>v.lang&&v.lang.startsWith(lang));
+  if(langQuality) return langQuality;
+  // Fall back to named voices
+  const preferred=isFrench?['Thomas','Audrey','Amélie','Marie','Virginie']:['Samantha','Alex'];
   for(const name of preferred){
     const voice=speechVoices.find(v=>v.name.includes(name));
     if(voice) return voice;
@@ -935,6 +945,10 @@ function selectBatch(batchNum){
       activeVocab=batches[n];
     }
   }
+  // A+ Fix: Reset to Choose mode if coming from wrong-only session
+  if(wrongSourceBatch!==null&&mode==='write'){
+    setMode('choose');
+  }
   wrongSourceBatch=null;
   updateBatchIndicator();
   saveBatchState();
@@ -991,8 +1005,9 @@ function updateStartHint(){
   // Check for in-progress session (mid-batch)
   const hasProgress=started&&qIdx>0&&qIdx<activeVocab.length;
   const progressText=hasProgress?` (${qIdx}/${activeVocab.length} in current)` : '';
+  const modeLabel=mode==='choose'?'Choose':'Write';
   if(hasSaved && (completed>0||hasProgress)){
-    hint.innerHTML=`Welcome back! <strong>${completed}/6 batches</strong> completed${progressText}.<br><br>
+    hint.innerHTML=`Welcome back! <strong>${completed}/6 batches</strong> completed${progressText}. Ready in <strong>${modeLabel}</strong> mode.<br><br>
       <button id="resume-btn" style="background:var(--accent);border:none;border-radius:10px;color:#fff;font-family:'Outfit',sans-serif;font-size:15px;font-weight:600;padding:12px 24px;cursor:pointer;margin-right:10px;">Resume</button>
       <button id="new-shuffle-btn" style="background:var(--surface2);border:1.5px solid var(--accent);border-radius:10px;color:var(--text);font-family:'Outfit',sans-serif;font-size:15px;font-weight:600;padding:12px 24px;cursor:pointer;">New Shuffle</button><br><br>
       <a id="clear-progress-link" style="color:var(--muted);font-size:13px;cursor:pointer;text-decoration:underline;">Clear all progress</a>`;
@@ -1010,7 +1025,7 @@ function updateStartHint(){
       }
     });
   }else{
-    hint.innerHTML='Tap <strong>Shuffle</strong> to begin a<br/>timed 300-word session.';
+    hint.innerHTML=`Tap <strong>Shuffle</strong> to begin a<br/>timed 300-word session in <strong>${modeLabel}</strong> mode.`;
   }
 }
 
