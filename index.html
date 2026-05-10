@@ -178,17 +178,38 @@ body{display:flex;flex-direction:column;padding-top:var(--safe-top);padding-bott
 .speak-btn:active{transform:scale(.9);background:var(--surface2)}
 
 /* ── TOAST NOTIFICATION ── */
-.toast-notification{position:fixed;bottom:120px;left:50%;transform:translateX(-50%);background:rgba(26,26,46,0.95);color:var(--text);padding:16px 24px;border-radius:12px;z-index:9000;opacity:0;transition:opacity .4s;pointer-events:auto;font-size:14px;line-height:1.5;white-space:normal;width:90%;max-width:340px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,.4);border:1px solid rgba(255,255,255,0.1)}
+.toast-notification{position:fixed;bottom:120px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.9);color:white;padding:16px 24px;border-radius:12px;z-index:9000;opacity:0;transition:opacity .4s;pointer-events:auto;font-size:14px;line-height:1.5;white-space:normal;width:90%;max-width:340px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,.4);border:1px solid rgba(255,255,255,0.1)}
 .toast-notification.show{opacity:1}
+
+/* ── HELP MODAL ── */
+#help-modal{position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:10000;display:none;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(5px)}
+#help-modal.show{display:flex}
+.help-content{background:var(--surface);width:100%;max-width:400px;border-radius:20px;padding:30px;position:relative;box-shadow:0 20px 50px rgba(0,0,0,0.5);border:1px solid var(--surface2)}
+.help-content h2{margin-bottom:20px;font-size:22px;font-weight:700}
+.help-content p{margin-bottom:15px;line-height:1.6;font-size:15px;color:var(--text)}
+.help-close{position:absolute;top:15px;right:15px;background:var(--surface2);border:none;border-radius:50%;width:30px;height:30px;color:white;cursor:pointer;font-weight:bold}
+.help-btn{background:none;border:1.5px solid var(--accent);color:var(--accent2);width:24px;height:24px;border-radius:50%;font-size:14px;font-weight:bold;cursor:pointer;margin-left:8px;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle}
 </style>
 </head>
 <body>
 
 <!-- AUDIO TOAST -->
-<div id="audio-toast" class="toast-notification" onclick="this.style.display='none'">🔇 If you hear nothing, check your device audio settings. (Tap to close)</div>
+<div id="audio-toast" class="toast-notification" onclick="this.style.display='none'">🔇 No sound? Tap the "?" icon for help.</div>
 
 <!-- QUALITY HINT TOAST -->
-<div id="quality-toast" class="toast-notification" onclick="this.style.display='none'">💡 Tip: For better French voices, download 'Thomas (Premium)' in Settings → Accessibility → Spoken Content → Voices (Tap to close)</div>
+<div id="quality-toast" class="toast-notification" onclick="this.style.display='none'">💡 Tip: For better voices, check the "?" help guide.</div>
+
+<!-- HELP MODAL -->
+<div id="help-modal">
+  <div class="help-content">
+    <button class="help-close" onclick="closeHelp()">×</button>
+    <h2>🔊 Audio Help</h2>
+    <p><strong>iPhone Users:</strong> Ensure your <b>Silent Switch</b> (side of phone) is turned OFF and volume is up.</p>
+    <p><strong>Mac Chrome:</strong> Chrome has a bug with cloud voices. If it sounds robotic, try <b>Safari</b> for premium quality.</p>
+    <p><strong>Still no sound?</strong> Refresh the page or ensure no other tabs are playing audio.</p>
+    <button style="width:100%;padding:12px;background:var(--accent);border:none;border-radius:10px;color:white;font-weight:bold;margin-top:10px;cursor:pointer" onclick="closeHelp()">Got it!</button>
+  </div>
+</div>
 
 <!-- MODE SLIDER -->
 <div id="mode-bar">
@@ -776,6 +797,7 @@ function speak(text,lang='fr-FR'){
 
   // A+ Surgical Option 3: Force high-quality Google TTS stream for Chrome Mac
   const isChromeMac=/Mac/.test(navigator.userAgent) && /Chrome/.test(navigator.userAgent);
+  console.log('Neural Stream Check:', { isChromeMac, userAgent: navigator.userAgent });
   // Force neural stream for ALL Chrome Mac users because the native cloud voice is unreliable
   if(isChromeMac){
     console.log('Surgical Fallback: Forcing high-quality Google Neural stream for Chrome Mac stability...');
@@ -1130,9 +1152,13 @@ function updateStartHint(){
       }
     });
   }else{
-    hint.innerHTML=`Tap <strong>Shuffle</strong> to begin a<br/>timed 300-word session in <strong>${modeLabel}</strong> mode.`;
+    hint.innerHTML=`Tap <strong>Shuffle</strong> to begin a<br/>timed 300-word session in <strong>${modeLabel}</strong> mode.
+      <br><button class="help-btn" onclick="openHelp()" style="margin-top:15px">?</button>`;
   }
 }
+
+function openHelp(){ document.getElementById('help-modal').classList.add('show'); }
+function closeHelp(){ document.getElementById('help-modal').classList.remove('show'); }
 
 function findNextUncompletedBatch(){
   for(let i=0;i<6;i++){
