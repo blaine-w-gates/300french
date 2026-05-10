@@ -205,7 +205,8 @@ body{display:flex;flex-direction:column;padding-top:var(--safe-top);padding-bott
     <button class="help-close" onclick="closeHelp()">×</button>
     <h2>🔊 Audio Help</h2>
     <p><strong>iPhone Users:</strong> Ensure your <b>Silent Switch</b> (side of phone) is turned OFF and volume is up.</p>
-    <p><strong>Mac Chrome:</strong> Chrome has a bug with cloud voices. If it sounds robotic, try <b>Safari</b> for premium quality.</p>
+    <p><strong>Better Quality:</strong> To get premium voices on iPhone, go to <b>Settings → Accessibility → Spoken Content → Voices → French</b> and download <i>'Thomas (Premium)'</i> or <i>'Audrey (Enhanced)'</i>.</p>
+    <p><strong>Mac Chrome:</strong> If audio sounds robotic or fails, try <b>Safari</b> for the best premium experience.</p>
     <p><strong>Still no sound?</strong> Refresh the page or ensure no other tabs are playing audio.</p>
     <button style="width:100%;padding:12px;background:var(--accent);border:none;border-radius:10px;color:white;font-weight:bold;margin-top:10px;cursor:pointer" onclick="closeHelp()">Got it!</button>
   </div>
@@ -569,12 +570,7 @@ const VOCAB=[
 <script>
 // ── GLOBAL ERROR BOUNDARY ──
 window.onerror = function(msg, url, lineNo, columnNo, error) {
-  console.error('GLOBAL ERROR:', {msg, url, lineNo, error});
-  // Only alert once per session to avoid annoying loops
-  if(!window.errorAlerted){
-    alert('Oops! Something went wrong. The app has been stabilized. Please refresh if issues persist.');
-    window.errorAlerted = true;
-  }
+  console.error('App error:', msg, 'at', url + ':' + lineNo);
   return false;
 };
 
@@ -599,8 +595,6 @@ let completedBatches = [];  // Boolean array [false, false, ...]
 // ── SPEECH STATE ──
 let speechVoices=[];
 let speechInitialized=false;
-let activeUtterance=null; // A+ Fix: Global reference to prevent Chrome GC bug
-let voiceBlacklist=new Set(); // A+ Fix: Track failing cloud voices
 
 // ── PERSISTENCE ──
 const STORAGE_KEY = 'vocabBatchState';
@@ -703,46 +697,8 @@ function initSpeech(){
 }
 
 function getBestVoice(lang){
-  // A+ Fix: Prioritize Premium/Enhanced/Google voices for quality
-  const isFrench=lang.startsWith('fr');
-  const isMac=/Mac/.test(navigator.userAgent);
-  
-  console.log('Voice Selection Debug:', { isMac, isFrench, totalVoices: speechVoices.length });
-  
-  const qualityVoices=speechVoices.filter(v=>{
-    const name=v.name||'';
-    // Skip voices that have failed in this session
-    if(voiceBlacklist.has(name)) return false;
-    // Prioritize Google Cloud voices for "Jenny" quality, but keep local Premium/Thomas as fallbacks
-    return name.includes('Google') || name.includes('Premium') || name.includes('Enhanced') || name.includes('Thomas') || name.includes('Audrey');
-  });
-  
-  console.log('Quality voices count:', qualityVoices.length);
-  
-  // A+: Strict Priority Search to ensure Google > Premium > Thomas
-  const priorities = isFrench 
-    ? ['Google', 'Premium', 'Enhanced', 'Thomas', 'Audrey'] 
-    : ['Google', 'Premium', 'Enhanced', 'Samantha', 'Alex'];
-  
-  for (const p of priorities) {
-    const found = qualityVoices.find(v => v.name.includes(p) && v.lang.startsWith(lang));
-    if (found) {
-      console.log('Selected priority quality voice:', found.name, found.lang);
-      return found;
-    }
-  }
-  // Fall back to named voices
-  const preferred=isFrench?['Thomas','Audrey','Amélie','Marie','Virginie']:['Samantha','Alex'];
-  for(const name of preferred){
-    const voice=speechVoices.find(v=>v.name.includes(name));
-    if(voice){
-      console.log('Selected named voice:', voice.name, voice.lang);
-      return voice;
-    }
-  }
-  const fallback=speechVoices.find(v=>v.lang&&v.lang.startsWith(lang))||speechVoices[0];
-  console.log('Selected fallback voice:', fallback?.name, fallback?.lang);
-  return fallback;
+  // Find a voice matching the requested language
+  return speechVoices.find(v=>v.lang&&v.lang.startsWith(lang))||speechVoices[0];
 }
 
 function showToast(){
@@ -767,67 +723,31 @@ function showQualityHint(){
 }
 
 function speak(text,lang='fr-FR'){
-  try {
-    // A+ Surgical Bypass: Chrome Mac engine is often hung; bypass it IMMEDIATELY
-    const isChromeMac=/Mac/.test(navigator.userAgent) && /Chrome/.test(navigator.userAgent);
-    if(isChromeMac){
-      console.log('Neural Fallback: Bypassing broken Chrome engine...');
-      const url=`https://translate.google.com/translate_tts?ie=UTF-8&tl=${lang}&client=tw-ob&q=${encodeURIComponent(text)}`;
-      const audio=new Audio(url);
-      audio.play().catch(err=>{
-        console.warn('Neural stream failed. Falling back to native...', err);
-        speakLocal(text, lang, false);
-      });
-      return;
-    }
-
-    if(!window.speechSynthesis){
-      console.warn('Web Speech API not supported');
-      return;
-    }
-    
-    // Show audio toast on first use
-    if(!localStorage.getItem('audioToastShown')){
-      showToast();
-      localStorage.setItem('audioToastShown','true');
-    } else {
-      const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent);
-      if(isIOS&&!hasQualityVoice()&&!localStorage.getItem('qualityHintShown')){
-        showQualityHint();
-        localStorage.setItem('qualityHintShown','true');
-      }
-    }
-
-    // Native Speech Handling
-    const isSpeaking=window.speechSynthesis.speaking;
-    if(isSpeaking) window.speechSynthesis.cancel();
-    speakLocal(text, lang, isSpeaking);
-  } catch (e) {
-    console.error('CRITICAL SPEECH ERROR:', e);
+  if(!window.speechSynthesis){
+    console.warn('Web Speech API not supported');
+    return;
   }
-}
-
-function speakLocal(text, lang, isSpeaking){
-  const delay=isSpeaking ? 300 : 50;
+  
+  // Show toast on first use
+  if(!localStorage.getItem('audioToastShown')){
+    showToast();
+    localStorage.setItem('audioToastShown','true');
+  }
+  
+  // Only cancel if something is actually speaking
+  if(window.speechSynthesis.speaking){
+    window.speechSynthesis.cancel();
+  }
+  
   setTimeout(()=>{
-    activeUtterance=new SpeechSynthesisUtterance(text);
-    const selectedVoice=getBestVoice(lang);
-    activeUtterance.voice=selectedVoice;
-    activeUtterance.lang=selectedVoice ? selectedVoice.lang : lang;
-    activeUtterance.rate=0.9;
-    
-    activeUtterance.onerror=(e)=>{
-      console.error('Speech synthesis error:', e.error || 'Unknown Error', e);
-      // A+ Recovery: If a cloud voice (Google) fails, blacklist it and retry
-      if(selectedVoice && selectedVoice.name.includes('Google') && (e.error === 'interrupted' || e.error === 'network')){
-        console.warn(`Cloud voice [${selectedVoice.name}] failed. Blacklisting and retrying...`);
-        voiceBlacklist.add(selectedVoice.name);
-        speak(text, lang); 
-      }
+    const u=new SpeechSynthesisUtterance(text);
+    u.lang=lang;
+    u.rate=0.9;
+    u.onerror=(e)=>{
+      console.error('Speech error:', e.error);
     };
-    
-    window.speechSynthesis.speak(activeUtterance);
-  },delay);
+    window.speechSynthesis.speak(u);
+  }, 100);
 }
 
 function createBatches(){
