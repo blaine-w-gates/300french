@@ -185,6 +185,9 @@ body{display:flex;flex-direction:column;padding-top:var(--safe-top);padding-bott
 <!-- AUDIO TOAST -->
 <div id="audio-toast" class="toast-notification" onclick="this.style.display='none'">🔇 If you hear nothing, check your device audio settings. (Tap to close)</div>
 
+<!-- QUALITY HINT TOAST -->
+<div id="quality-toast" class="toast-notification" onclick="this.style.display='none'">💡 Tip: For better French voices, download 'Thomas (Premium)' in Settings → Accessibility → Spoken Content → Voices (Tap to close)</div>
+
 <!-- MODE SLIDER -->
 <div id="mode-bar">
   <div class="slider-wrap" role="group" aria-label="Mode selector">
@@ -689,6 +692,20 @@ function showToast(){
   setTimeout(()=>{toast.classList.remove('show');},4000);
 }
 
+function hasQualityVoice(){
+  return speechVoices.some(v=>{
+    const name=v.name||'';
+    return name.includes('Premium')||name.includes('Enhanced')||name.includes('Google');
+  });
+}
+
+function showQualityHint(){
+  const toast=document.getElementById('quality-toast');
+  if(!toast) return;
+  toast.classList.add('show');
+  setTimeout(()=>{toast.classList.remove('show');},6000);
+}
+
 function speak(text,lang='fr-FR'){
   if(!window.speechSynthesis){
     console.warn('Web Speech API not supported');
@@ -697,10 +714,18 @@ function speak(text,lang='fr-FR'){
   // iOS aggressive GC fix: re-check voices if empty
   if(speechVoices.length===0) speechVoices=window.speechSynthesis.getVoices();
   if(!speechInitialized) initSpeech();
-  // Show toast on first use
+  
+  // Show audio toast on first use
   if(!localStorage.getItem('audioToastShown')){
     showToast();
     localStorage.setItem('audioToastShown','true');
+  } else {
+    // Show quality hint on iOS if no premium voices (only after first toast has been seen)
+    const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent);
+    if(isIOS&&!hasQualityVoice()&&!localStorage.getItem('qualityHintShown')){
+      showQualityHint();
+      localStorage.setItem('qualityHintShown','true');
+    }
   }
   // iOS queue bug fix: cancel before speaking
   window.speechSynthesis.cancel();
