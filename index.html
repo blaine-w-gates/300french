@@ -768,22 +768,23 @@ function showQualityHint(){
 
 function speak(text,lang='fr-FR'){
   try {
+    // A+ Surgical Bypass: Chrome Mac engine is often hung; bypass it IMMEDIATELY
+    const isChromeMac=/Mac/.test(navigator.userAgent) && /Chrome/.test(navigator.userAgent);
+    if(isChromeMac){
+      console.log('Neural Fallback: Bypassing broken Chrome engine...');
+      const url=`https://translate.google.com/translate_tts?ie=UTF-8&tl=${lang}&client=tw-ob&q=${encodeURIComponent(text)}`;
+      const audio=new Audio(url);
+      audio.play().catch(err=>{
+        console.warn('Neural stream failed. Falling back to native...', err);
+        speakLocal(text, lang, false);
+      });
+      return;
+    }
+
     if(!window.speechSynthesis){
       console.warn('Web Speech API not supported');
       return;
     }
-    // Chrome Mac fix: Force init if voices empty, even if already initialized
-    if(!speechInitialized || speechVoices.length===0){
-      initSpeech();
-      // Chrome Mac: voices may still be loading, force another getVoices call
-      if(speechVoices.length===0){
-        speechVoices=window.speechSynthesis.getVoices();
-      }
-    }
-    
-    // Debug logging for Chrome Mac issues
-    const isChromeMac=/Mac/.test(navigator.userAgent) && /Chrome/.test(navigator.userAgent);
-    console.log('Speech Triggered:', { text, lang, isChromeMac });
     
     // Show audio toast on first use
     if(!localStorage.getItem('audioToastShown')){
@@ -796,24 +797,10 @@ function speak(text,lang='fr-FR'){
         localStorage.setItem('qualityHintShown','true');
       }
     }
-    // Chrome Mac fix: Only cancel if actually speaking
-    const isSpeaking=window.speechSynthesis.speaking;
-    if(isSpeaking){
-      window.speechSynthesis.cancel();
-    }
 
-    // A+ Surgical Option 3: Force high-quality Google TTS stream for Chrome Mac
-    if(isChromeMac){
-      console.log('Surgical Fallback: Forcing high-quality Google Neural stream...');
-      const url=`https://translate.google.com/translate_tts?ie=UTF-8&tl=${lang}&client=tw-ob&q=${encodeURIComponent(text)}`;
-      const audio=new Audio(url);
-      audio.play().catch(err=>{
-        console.warn('Google Neural stream failed or offline. Falling back to local Web Speech API...', err);
-        speakLocal(text, lang, isSpeaking);
-      });
-      return;
-    }
-    
+    // Native Speech Handling
+    const isSpeaking=window.speechSynthesis.speaking;
+    if(isSpeaking) window.speechSynthesis.cancel();
     speakLocal(text, lang, isSpeaking);
   } catch (e) {
     console.error('CRITICAL SPEECH ERROR:', e);
@@ -1148,9 +1135,6 @@ function updateStartHint(){
     document.getElementById('new-shuffle-btn').addEventListener('click',()=>{
       createFreshBatches();
       beginSession(true);
-    });
-        document.getElementById('timer').textContent='00:00';
-      }
     });
     document.getElementById('clear-progress-link').addEventListener('click',()=>{
       if(confirm('Clear all saved progress? This cannot be undone.')){
