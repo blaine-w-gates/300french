@@ -567,6 +567,17 @@ const VOCAB=[
 ];
 </script>
 <script>
+// ── GLOBAL ERROR BOUNDARY ──
+window.onerror = function(msg, url, lineNo, columnNo, error) {
+  console.error('GLOBAL ERROR:', {msg, url, lineNo, error});
+  // Only alert once per session to avoid annoying loops
+  if(!window.errorAlerted){
+    alert('Oops! Something went wrong. The app has been stabilized. Please refresh if issues persist.');
+    window.errorAlerted = true;
+  }
+  return false;
+};
+
 // ── STATE ──
 let mode = 'choose';   // 'choose' | 'write'
 let queue = [];        // shuffled VOCAB indices
@@ -756,62 +767,57 @@ function showQualityHint(){
 }
 
 function speak(text,lang='fr-FR'){
-  if(!window.speechSynthesis){
-    console.warn('Web Speech API not supported');
-    return;
-  }
-  // Chrome Mac fix: Force init if voices empty, even if already initialized
-  if(!speechInitialized || speechVoices.length===0){
-    initSpeech();
-    // Chrome Mac: voices may still be loading, force another getVoices call
-    if(speechVoices.length===0){
-      speechVoices=window.speechSynthesis.getVoices();
+  try {
+    if(!window.speechSynthesis){
+      console.warn('Web Speech API not supported');
+      return;
     }
-  }
-  
-  // Debug logging for Chrome Mac issues
-  console.log('Speech Debug:', {
-    speechInitialized,
-    voiceCount: speechVoices.length,
-    selectedVoice: getBestVoice(lang)?.name || 'NONE FOUND',
-    isChromeMac: /Mac/.test(navigator.userAgent) && /Chrome/.test(navigator.userAgent)
-  });
-  
-  // Show audio toast on first use
-  if(!localStorage.getItem('audioToastShown')){
-    showToast();
-    localStorage.setItem('audioToastShown','true');
-  } else {
-    // Show quality hint on iOS if no premium voices (only after first toast has been seen)
-    const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent);
-    if(isIOS&&!hasQualityVoice()&&!localStorage.getItem('qualityHintShown')){
-      showQualityHint();
-      localStorage.setItem('qualityHintShown','true');
+    // Chrome Mac fix: Force init if voices empty, even if already initialized
+    if(!speechInitialized || speechVoices.length===0){
+      initSpeech();
+      // Chrome Mac: voices may still be loading, force another getVoices call
+      if(speechVoices.length===0){
+        speechVoices=window.speechSynthesis.getVoices();
+      }
     }
-  }
-  // Chrome Mac fix: Only cancel if actually speaking
-  const isSpeaking=window.speechSynthesis.speaking;
-  if(isSpeaking){
-    window.speechSynthesis.cancel();
-  }
+    
+    // Debug logging for Chrome Mac issues
+    const isChromeMac=/Mac/.test(navigator.userAgent) && /Chrome/.test(navigator.userAgent);
+    console.log('Speech Triggered:', { text, lang, isChromeMac });
+    
+    // Show audio toast on first use
+    if(!localStorage.getItem('audioToastShown')){
+      showToast();
+      localStorage.setItem('audioToastShown','true');
+    } else {
+      const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent);
+      if(isIOS&&!hasQualityVoice()&&!localStorage.getItem('qualityHintShown')){
+        showQualityHint();
+        localStorage.setItem('qualityHintShown','true');
+      }
+    }
+    // Chrome Mac fix: Only cancel if actually speaking
+    const isSpeaking=window.speechSynthesis.speaking;
+    if(isSpeaking){
+      window.speechSynthesis.cancel();
+    }
 
-  // A+ Surgical Option 3: Force high-quality Google TTS stream for Chrome Mac
-  const isChromeMac=/Mac/.test(navigator.userAgent) && /Chrome/.test(navigator.userAgent);
-  console.log('Neural Stream Check:', { isChromeMac, userAgent: navigator.userAgent });
-  // Force neural stream for ALL Chrome Mac users because the native cloud voice is unreliable
-  if(isChromeMac){
-    console.log('Surgical Fallback: Forcing high-quality Google Neural stream for Chrome Mac stability...');
-    const url=`https://translate.google.com/translate_tts?ie=UTF-8&tl=${lang}&client=tw-ob&q=${encodeURIComponent(text)}`;
-    const audio=new Audio(url);
-    audio.play().catch(err=>{
-      console.warn('Google Neural stream failed or offline. Falling back to local Web Speech API...', err);
-      // Fallback to existing local logic if network fails
-      speakLocal(text, lang, isSpeaking);
-    });
-    return;
+    // A+ Surgical Option 3: Force high-quality Google TTS stream for Chrome Mac
+    if(isChromeMac){
+      console.log('Surgical Fallback: Forcing high-quality Google Neural stream...');
+      const url=`https://translate.google.com/translate_tts?ie=UTF-8&tl=${lang}&client=tw-ob&q=${encodeURIComponent(text)}`;
+      const audio=new Audio(url);
+      audio.play().catch(err=>{
+        console.warn('Google Neural stream failed or offline. Falling back to local Web Speech API...', err);
+        speakLocal(text, lang, isSpeaking);
+      });
+      return;
+    }
+    
+    speakLocal(text, lang, isSpeaking);
+  } catch (e) {
+    console.error('CRITICAL SPEECH ERROR:', e);
   }
-  
-  speakLocal(text, lang, isSpeaking);
 }
 
 function speakLocal(text, lang, isSpeaking){
@@ -1143,14 +1149,38 @@ function updateStartHint(){
       createFreshBatches();
       beginSession(true);
     });
+        document.getElementById('timer').textContent='00:00';
+      }
+    });
     document.getElementById('clear-progress-link').addEventListener('click',()=>{
       if(confirm('Clear all saved progress? This cannot be undone.')){
         createFreshBatches();
         document.getElementById('english-word').textContent='—';
         document.getElementById('word-counter').textContent='';
         document.getElementById('timer').textContent='00:00';
+        updateStartHint();
       }
     });
+    // Add Individual Batch Reset
+    const resetBatchLink = document.createElement('a');
+    resetBatchLink.style = "color:var(--wrong);font-size:13px;cursor:pointer;text-decoration:underline;margin-left:20px;";
+    resetBatchLink.textContent = "Reset this batch";
+    resetBatchLink.onclick = () => {
+      if(currentBatch !== null && confirm(`Reset progress for Batch ${parseInt(currentBatch)+1}?`)){
+        const batchWords = batches[currentBatch];
+        batchWords.forEach(w => {
+          const sIdx = score.findIndex(s => s.word.fr === w.fr);
+          if(sIdx !== -1) score.splice(sIdx, 1);
+        });
+        completedBatches[currentBatch] = false;
+        saveBatchState();
+        buildReview();
+        updateStartHint();
+        alert('Batch reset successfully.');
+      }
+    };
+    hint.appendChild(document.createElement('br'));
+    hint.appendChild(resetBatchLink);
   }else{
     hint.innerHTML=`Tap <strong>Shuffle</strong> to begin a<br/>timed 300-word session in <strong>${modeLabel}</strong> mode.
       <br><button class="help-btn" onclick="openHelp()" style="margin-top:15px">?</button>`;
