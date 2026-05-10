@@ -568,6 +568,7 @@ let completedBatches = [];  // Boolean array [false, false, ...]
 let speechVoices=[];
 let speechInitialized=false;
 let activeUtterance=null; // A+ Fix: Global reference to prevent Chrome GC bug
+let voiceBlacklist=new Set(); // A+ Fix: Track failing cloud voices
 
 // ── PERSISTENCE ──
 const STORAGE_KEY = 'vocabBatchState';
@@ -678,6 +679,8 @@ function getBestVoice(lang){
   
   const qualityVoices=speechVoices.filter(v=>{
     const name=v.name||'';
+    // Skip voices that have failed in this session
+    if(voiceBlacklist.has(name)) return false;
     // Prioritize Google Cloud voices for "Jenny" quality, but keep local Premium/Thomas as fallbacks
     return name.includes('Google') || name.includes('Premium') || name.includes('Enhanced') || name.includes('Thomas') || name.includes('Audrey');
   });
@@ -784,6 +787,13 @@ function speak(text,lang='fr-FR'){
     activeUtterance.onerror=(e)=>{
       console.error('Speech synthesis error:', e.error || 'Unknown Error', e);
       console.error('Failed Utterance Details:', { text, lang: activeUtterance.lang, voice: activeUtterance.voice?.name, isSpeakingBefore: isSpeaking });
+      
+      // A+ Recovery: If a cloud voice (Google) fails, blacklist it and retry with a local voice
+      if(selectedVoice && selectedVoice.name.includes('Google') && (e.error === 'interrupted' || e.error === 'network')){
+        console.warn(`Cloud voice [${selectedVoice.name}] failed. Blacklisting and retrying with local fallback...`);
+        voiceBlacklist.add(selectedVoice.name);
+        speak(text, lang); // Recursive call will now pick a non-blacklisted voice
+      }
     };
     
     window.speechSynthesis.speak(activeUtterance);
